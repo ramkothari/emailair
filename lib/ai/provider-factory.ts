@@ -87,7 +87,7 @@ export class ProviderFactory {
   private static getModel(provider: string): string {
     const models: Record<string, string> = {
       openai: "gpt-4-turbo",
-      grok: "grok-2",
+      grok: "llama-3.3-70b-versatile",
       gemini: "gemini-2.0-flash",
       deepseek: "deepseek-chat",
       claude: "claude-3-5-sonnet-20241022",

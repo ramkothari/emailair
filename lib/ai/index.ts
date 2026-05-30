@@ -5,9 +5,27 @@
  * All controllers are exposed through this unified API
  */
 
-export { parseIntent } from "./controllers/intent-controller";
-export { analyzeEmails } from "./controllers/analysis-controller";
-export { detectRisk } from "./controllers/risk-controller";
-export { summarizeEmails } from "./controllers/summary-controller";
+"use server";
+
+import { parseIntent as parseIntentController } from "./controllers/intent-controller";
+import { analyzeEmails as analyzeEmailsController } from "./controllers/analysis-controller";
+import { detectRisk as detectRiskController } from "./controllers/risk-controller";
+import { summarizeEmails as summarizeEmailsController } from "./controllers/summary-controller";
 
 export type { Intent, EmailAnalysis, RiskAssessment, EmailSummary } from "@/types/ai";
+
+export async function parseIntent(prompt: string) {
+  return parseIntentController(prompt);
+}
+
+export async function analyzeEmails(emailBodies: string[]) {
+  return analyzeEmailsController(emailBodies);
+}
+
+export async function detectRisk(emailBodies: string[]) {
+  return detectRiskController(emailBodies);
+}
+
+export async function summarizeEmails(emailBodies: string[]) {
+  return summarizeEmailsController(emailBodies);
+}

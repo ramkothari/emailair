@@ -175,11 +175,11 @@ export default function AIPlaygroundPage() {
               <code className="font-mono">.env.local</code>:
             </p>
             <pre className="mt-3 overflow-x-auto rounded bg-blue-100 p-3 text-xs text-blue-900">
-              AI_PROVIDER=openai{"\n"}
-              OPENAI_API_KEY=sk-...
+              AI_PROVIDER=grok{"\n"}
+              GROK_API_KEY=xai-...
             </pre>
             <p className="mt-3 text-xs text-blue-700">
-              Supported: openai, grok, gemini, deepseek, claude
+              Supported: openai (OPENAI_API_KEY), grok (GROK_API_KEY), gemini (GEMINI_API_KEY), deepseek (DEEPSEEK_API_KEY), claude (CLAUDE_API_KEY)
             </p>
           </div>
         </div>

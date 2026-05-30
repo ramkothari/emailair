@@ -1,11 +1,12 @@
 /**
- * Grok Provider
+ * Grok Provider (via Groq.com API)
+ * Uses Groq's OpenAI-compatible endpoint
  */
 
 import { BaseProvider, type ProviderConfig } from "../base-provider";
 
 export class GrokProvider extends BaseProvider {
-  private endpoint = "https://api.x.ai/v1/chat/completions";
+  private endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
   constructor(config: ProviderConfig) {
     super(config);
@@ -32,9 +33,9 @@ export class GrokProvider extends BaseProvider {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const errorData = await response.text();
       throw new Error(
-        `Grok API error: ${error.error?.message || response.statusText}`
+        `Groq API error: ${response.statusText} - ${errorData}`
       );
     }
 
@@ -64,6 +65,6 @@ export class GrokProvider extends BaseProvider {
   }
 
   getName(): string {
-    return "Grok";
+    return "Grok (Groq)";
   }
 }
