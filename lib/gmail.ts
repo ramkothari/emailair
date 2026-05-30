@@ -296,3 +296,161 @@ export async function searchEmails(
     emails,
   };
 }
+
+function getGmailClient(accessToken: string) {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+
+  return google.gmail({ version: "v1", auth });
+}
+
+function decodeBase64Url(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64").toString("utf-8");
+}
+
+function decodeBase64UrlToBuffer(value: string): Buffer {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64");
+}
+
+function htmlToReadableText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function collectEmailParts(
+  part: gmail_v1.Schema$MessagePart,
+  result: {
+    plainBodies: string[];
+    htmlBodies: string[];
+    attachments: Array<{
+      attachmentId: string;
+      filename: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }
+): void {
+  const mimeType = part.mimeType || "";
+  const filename = part.filename || "";
+  const body = part.body;
+
+  if (filename && body?.attachmentId) {
+    result.attachments.push({
+      attachmentId: body.attachmentId,
+      filename,
+      mimeType,
+      size: Number(body.size || 0),
+    });
+  }
+
+  if (body?.data && mimeType === "text/plain") {
+    result.plainBodies.push(decodeBase64Url(body.data));
+  }
+
+  if (body?.data && mimeType === "text/html") {
+    result.htmlBodies.push(decodeBase64Url(body.data));
+  }
+
+  for (const childPart of part.parts || []) {
+    collectEmailParts(childPart, result);
+  }
+}
+
+export async function getEmailDetails(
+  accessToken: string,
+  messageId: string
+) {
+  const gmail = getGmailClient(accessToken);
+
+  const response = await gmail.users.messages.get({
+    userId: "me",
+    id: messageId,
+    format: "full",
+  });
+
+  const message = response.data;
+  const payload = message.payload;
+
+  if (!payload) {
+    throw new Error("Email payload not found");
+  }
+
+  const headers = payload.headers;
+
+  const collected = {
+    plainBodies: [] as string[],
+    htmlBodies: [] as string[],
+    attachments: [] as Array<{
+      attachmentId: string;
+      filename: string;
+      mimeType: string;
+      size: number;
+    }>,
+  };
+
+  collectEmailParts(payload, collected);
+
+  const plainBody = collected.plainBodies.join("\n\n").trim();
+  const htmlBody = collected.htmlBodies.join("\n\n").trim();
+
+  const body =
+    plainBody ||
+    (htmlBody ? htmlToReadableText(htmlBody) : message.snippet || "");
+
+  return {
+    id: message.id || messageId,
+    sender: getHeader(headers, "From") || "Unknown sender",
+    recipient: getHeader(headers, "To") || "Unknown recipient",
+    subject: getHeader(headers, "Subject") || "(No Subject)",
+    date: getHeader(headers, "Date") || "",
+    body,
+    attachments: collected.attachments,
+  };
+}
+
+export async function getAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string
+): Promise<Buffer> {
+  const gmail = getGmailClient(accessToken);
+
+  const response = await gmail.users.messages.attachments.get({
+    userId: "me",
+    messageId,
+    id: attachmentId,
+  });
+
+  if (!response.data.data) {
+    return Buffer.alloc(0);
+  }
+
+  return decodeBase64UrlToBuffer(response.data.data);
+}

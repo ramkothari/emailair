@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Email } from "@/types/email";
+import { EmailViewer } from "@/components/EmailViewer";
+import { ExportSelectedButton } from "@/components/ExportSelectedButton";
 
 export type FilterPreviewEmail = Email & {
   id: string;
@@ -37,6 +39,7 @@ export function FilterPreview({
   const [deleteConfirmData, setDeleteConfirmData] = useState<{
     count: number;
   } | null>(null);
+  const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
 
   const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
 
@@ -232,6 +235,8 @@ export function FilterPreview({
           >
             {isSubmitting ? "Deleting..." : "Delete Selected"}
           </button>
+
+          <ExportSelectedButton selectedMessageIds={Array.from(selectedIds)} />
         </div>
       </div>
 
@@ -301,6 +306,9 @@ export function FilterPreview({
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
                 Date
               </th>
+              <th className="w-20 px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                Action
+              </th>
             </tr>
           </thead>
 
@@ -346,12 +354,29 @@ export function FilterPreview({
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                     {email.date || "Unknown date"}
                   </td>
+
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setViewingEmailId(email.id)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      View
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {viewingEmailId && (
+        <EmailViewer
+          messageId={viewingEmailId}
+          onClose={() => setViewingEmailId(null)}
+        />
+      )}
     </div>
   );
 }
