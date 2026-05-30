@@ -97,3 +97,64 @@ export async function getRecentEmails(
     throw new Error(getGmailErrorMessage(error));
   }
 }
+
+export async function deleteEmails(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const auth = new google.auth.OAuth2();
+
+  auth.setCredentials({
+    access_token: accessToken,
+  });
+
+  const gmail = google.gmail({
+    version: "v1",
+    auth,
+  });
+
+  await Promise.all(
+    ids.map((id) =>
+      gmail.users.messages.trash({
+        userId: "me",
+        id,
+      })
+    )
+  );
+}
+
+export async function archiveEmails(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const auth = new google.auth.OAuth2();
+
+  auth.setCredentials({
+    access_token: accessToken,
+  });
+
+  const gmail = google.gmail({
+    version: "v1",
+    auth,
+  });
+
+  await Promise.all(
+    ids.map((id) =>
+      gmail.users.messages.modify({
+        userId: "me",
+        id,
+        requestBody: {
+          removeLabelIds: ["INBOX"],
+        },
+      })
+    )
+  );
+}

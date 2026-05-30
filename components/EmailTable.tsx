@@ -1,51 +1,231 @@
-import type { Email } from "@/types/email";
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { Email, EmailActionResult } from "@/types/email";
 
 type EmailTableProps = {
   emails: Email[];
+  onDeleteSelected: (ids: string[]) => Promise<EmailActionResult>;
+  onArchiveSelected: (ids: string[]) => Promise<EmailActionResult>;
 };
 
-export function EmailTable({ emails }: EmailTableProps) {
+export function EmailTable({
+  emails,
+  onDeleteSelected,
+  onArchiveSelected,
+}: EmailTableProps) {
+  const router = useRouter();
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [message, setMessage] = useState<EmailActionResult | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const selectedCount = selectedIds.length;
+  const allSelected = emails.length > 0 && selectedCount === emails.length;
+  const hasSelection = selectedCount > 0;
+
+  useEffect(() => {
+    setSelectedIds((currentIds) =>
+      currentIds.filter((id) => emails.some((email) => email.id === id))
+    );
+  }, [emails]);
+
+  useEffect(() => {
+    if (!selectAllRef.current) {
+      return;
+    }
+
+    selectAllRef.current.indeterminate =
+      selectedCount > 0 && selectedCount < emails.length;
+  }, [selectedCount, emails.length]);
+
+  function toggleEmail(id: string) {
+    setMessage(null);
+
+    setSelectedIds((currentIds) => {
+      if (currentIds.includes(id)) {
+        return currentIds.filter((currentId) => currentId !== id);
+      }
+
+      return [...currentIds, id];
+    });
+  }
+
+  function toggleAllEmails() {
+    setMessage(null);
+
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+
+    setSelectedIds(emails.map((email) => email.id));
+  }
+
+  function handleDeleteSelected() {
+    if (!hasSelection) {
+      setMessage({
+        success: false,
+        message: "Select at least one email to delete.",
+      });
+      return;
+    }
+
+    const idsToDelete = [...selectedIds];
+
+    startTransition(() => {
+      void (async () => {
+        const result = await onDeleteSelected(idsToDelete);
+
+        setMessage(result);
+
+        if (result.success) {
+          setSelectedIds([]);
+          router.refresh();
+        }
+      })();
+    });
+  }
+
+  function handleArchiveSelected() {
+    if (!hasSelection) {
+      setMessage({
+        success: false,
+        message: "Select at least one email to archive.",
+      });
+      return;
+    }
+
+    const idsToArchive = [...selectedIds];
+
+    startTransition(() => {
+      void (async () => {
+        const result = await onArchiveSelected(idsToArchive);
+
+        setMessage(result);
+
+        if (result.success) {
+          setSelectedIds([]);
+          router.refresh();
+        }
+      })();
+    });
+  }
+
   if (emails.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600">
-        No emails found in your inbox.
+      <div className="p-6">
+        <p className="text-sm text-gray-600">
+          No emails found in your inbox.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-              From
-            </th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-              Subject
-            </th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-              Date
-            </th>
-          </tr>
-        </thead>
+    <div>
+      <div className="flex flex-col gap-3 border-b bg-gray-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-gray-700">
+          Selected:{" "}
+          <span className="font-semibold text-gray-900">
+            {selectedCount}
+          </span>
+        </div>
 
-        <tbody className="divide-y divide-gray-200">
-          {emails.map((email) => (
-            <tr key={email.id} className="hover:bg-gray-50">
-              <td className="max-w-xs px-4 py-3 text-sm text-gray-900">
-                {email.sender}
-              </td>
-              <td className="max-w-md px-4 py-3 text-sm text-gray-900">
-                {email.subject}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                {email.date}
-              </td>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            disabled={!hasSelection || isPending}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
+          >
+            {isPending ? "Working..." : "Delete Selected"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleArchiveSelected}
+            disabled={!hasSelection || isPending}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          >
+            {isPending ? "Working..." : "Archive Selected"}
+          </button>
+        </div>
+      </div>
+
+      {message ? (
+        <div
+          className={`border-b px-6 py-3 text-sm ${
+            message.success
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {message.message}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-white">
+              <th className="w-12 px-6 py-3 text-left">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAllEmails}
+                  aria-label="Select all emails"
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                From
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                Subject
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                Date
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {emails.map((email) => {
+              const checked = selectedIds.includes(email.id);
+
+              return (
+                <tr
+                  key={email.id}
+                  className="border-b hover:bg-gray-50"
+                >
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleEmail(email.id)}
+                      aria-label={`Select email from ${email.sender}`}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {email.sender}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {email.subject}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {email.date}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

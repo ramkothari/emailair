@@ -4,3 +4,8 @@ export type Email = {
   subject: string;
   date: string;
 };
+
+export type EmailActionResult = {
+  success: boolean;
+  message: string;
+};

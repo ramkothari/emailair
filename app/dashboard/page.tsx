@@ -1,82 +1,195 @@
-import { EmailTable } from "@/components/EmailTable";
-import { LogoutButton } from "@/components/LogoutButton";
-import { auth } from "@/lib/auth";
-import { getRecentEmails } from "@/lib/gmail";
-import type { Email } from "@/types/email";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { EmailTable } from "@/components/EmailTable";
+import { auth, signOut } from "@/lib/auth";
+import {
+  archiveEmails,
+  deleteEmails,
+  getRecentEmails,
+} from "@/lib/gmail";
+import type { Email, EmailActionResult } from "@/types/email";
+
+function getGmailErrorMessage(error: unknown): string {
+  const maybeGoogleError = error as {
+    code?: number;
+    status?: number;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        error?: string;
+        error_description?: string;
+        message?: string;
+      };
+    };
+  };
+
+  const status =
+    maybeGoogleError.code ||
+    maybeGoogleError.status ||
+    maybeGoogleError.response?.status;
+
+  if (status === 401) {
+    return "Google session expired. Please sign out and connect Gmail again.";
+  }
+
+  if (status === 403) {
+    return "Missing Gmail permissions. Please reconnect Gmail and approve the updated permissions.";
+  }
+
+  return (
+    maybeGoogleError.response?.data?.message ||
+    maybeGoogleError.response?.data?.error_description ||
+    maybeGoogleError.message ||
+    "Gmail API request failed."
+  );
+}
 
 export default async function DashboardPage() {
   const session = await auth();
 
-  if (!session?.user?.email) {
+  if (!session?.accessToken) {
     redirect("/");
   }
 
-  if (!session.accessToken) {
-    return (
-      <main className="min-h-screen bg-gray-50 px-6 py-10">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-8 flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <LogoutButton />
-          </div>
-
-          <p className="mt-2 text-sm text-gray-600">
-            Signed in as {session.user.email}
-          </p>
-
-          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Gmail access token is missing. Please sign out and connect Gmail
-            again.
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   let emails: Email[] = [];
-  let errorMessage: string | null = null;
+  let loadError: string | null = null;
 
   try {
     emails = await getRecentEmails(session.accessToken, 20);
   } catch (error) {
-    errorMessage =
-      error instanceof Error ? error.message : "Failed to load Gmail emails.";
+    loadError = getGmailErrorMessage(error);
+  }
+
+  async function deleteSelectedEmails(
+    ids: string[]
+  ): Promise<EmailActionResult> {
+    "use server";
+
+    if (ids.length === 0) {
+      return {
+        success: false,
+        message: "Select at least one email to delete.",
+      };
+    }
+
+    const currentSession = await auth();
+
+    if (!currentSession?.accessToken) {
+      return {
+        success: false,
+        message: "Google session expired. Please sign in again.",
+      };
+    }
+
+    try {
+      await deleteEmails(currentSession.accessToken, ids);
+      revalidatePath("/dashboard");
+
+      return {
+        success: true,
+        message: `Moved ${ids.length} email${ids.length === 1 ? "" : "s"} to Trash.`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: getGmailErrorMessage(error),
+      };
+    }
+  }
+
+  async function archiveSelectedEmails(
+    ids: string[]
+  ): Promise<EmailActionResult> {
+    "use server";
+
+    if (ids.length === 0) {
+      return {
+        success: false,
+        message: "Select at least one email to archive.",
+      };
+    }
+
+    const currentSession = await auth();
+
+    if (!currentSession?.accessToken) {
+      return {
+        success: false,
+        message: "Google session expired. Please sign in again.",
+      };
+    }
+
+    try {
+      await archiveEmails(currentSession.accessToken, ids);
+      revalidatePath("/dashboard");
+
+      return {
+        success: true,
+        message: `Archived ${ids.length} email${ids.length === 1 ? "" : "s"}.`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: getGmailErrorMessage(error),
+      };
+    }
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-6 py-10">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50">
+      <header className="border-b bg-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-
-            <p className="mt-2 text-sm text-gray-600">
-              Signed in as {session.user.email}
+            <h1 className="text-2xl font-bold text-gray-900">
+              Gmail Hygiene
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              {session.user?.email}
             </p>
           </div>
-          <LogoutButton />
-        </div>
 
-        <section>
-          <div className="mb-4">
+          <form
+            action={async () => {
+              "use server";
+              await signOut({
+                redirectTo: "/",
+              });
+            }}
+          >
+            <button
+              type="submit"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Sign Out
+            </button>
+          </form>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-8">
+        <div className="rounded-lg bg-white shadow">
+          <div className="border-b px-6 py-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Recent Emails
+              Recent Inbox Emails
             </h2>
             <p className="mt-1 text-sm text-gray-600">
-              Showing your latest 20 Gmail inbox messages.
+              Select emails to manually delete or archive them.
             </p>
           </div>
 
-          {errorMessage ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {errorMessage}
+          {loadError ? (
+            <div className="p-6 text-sm text-red-600">
+              Failed to load emails: {loadError}
             </div>
           ) : (
-            <EmailTable emails={emails} />
+            <EmailTable
+              emails={emails}
+              onDeleteSelected={deleteSelectedEmails}
+              onArchiveSelected={archiveSelectedEmails}
+            />
           )}
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
