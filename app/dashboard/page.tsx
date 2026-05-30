@@ -1,22 +1,81 @@
+import { EmailTable } from "@/components/EmailTable";
+import { LogoutButton } from "@/components/LogoutButton";
 import { auth } from "@/lib/auth";
+import { getRecentEmails } from "@/lib/gmail";
+import type { Email } from "@/types/email";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
   const session = await auth();
 
+  if (!session?.user?.email) {
+    redirect("/");
+  }
+
+  if (!session.accessToken) {
+    return (
+      <main className="min-h-screen bg-gray-50 px-6 py-10">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8 flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <LogoutButton />
+          </div>
+
+          <p className="mt-2 text-sm text-gray-600">
+            Signed in as {session.user.email}
+          </p>
+
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            Gmail access token is missing. Please sign out and connect Gmail
+            again.
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  let emails: Email[] = [];
+  let errorMessage: string | null = null;
+
+  try {
+    emails = await getRecentEmails(session.accessToken, 20);
+  } catch (error) {
+    errorMessage =
+      error instanceof Error ? error.message : "Failed to load Gmail emails.";
+  }
+
   return (
-    <main className="min-h-screen px-6 py-10">
-      <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-          Dashboard
-        </h1>
+    <main className="min-h-screen bg-gray-50 px-6 py-10">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
 
-        <p className="mt-4 text-sm text-gray-600">
-          You are signed in as:
-        </p>
+            <p className="mt-2 text-sm text-gray-600">
+              Signed in as {session.user.email}
+            </p>
+          </div>
+          <LogoutButton />
+        </div>
 
-        <p className="mt-2 rounded-lg bg-gray-50 px-4 py-3 text-sm font-medium text-gray-900 ring-1 ring-gray-200">
-          {session?.user?.email}
-        </p>
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Recent Emails
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Showing your latest 20 Gmail inbox messages.
+            </p>
+          </div>
+
+          {errorMessage ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          ) : (
+            <EmailTable emails={emails} />
+          )}
+        </section>
       </div>
     </main>
   );
