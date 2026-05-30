@@ -2,12 +2,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmailTable } from "@/components/EmailTable";
 import { FilterBuilder } from "@/components/FilterBuilder";
+import { AnalyticsOverview } from "@/components/AnalyticsOverview";
+import { TopSenders } from "@/components/TopSenders";
+import { AttachmentInsights } from "@/components/AttachmentInsights";
+import { CleanupCandidates } from "@/components/CleanupCandidates";
 import { auth, signOut } from "@/lib/auth";
 import {
   archiveEmails,
   deleteEmails,
   getRecentEmails,
 } from "@/lib/gmail";
+import { getEmailAnalytics } from "@/lib/analytics";
 import {
   previewFilterAction,
   archiveFilterAction,
@@ -65,6 +70,18 @@ export default async function DashboardPage() {
     emails = await getRecentEmails(session.accessToken, 20);
   } catch (error) {
     loadError = getGmailErrorMessage(error);
+  }
+
+  let analytics = null;
+  let analyticsError: string | null = null;
+
+  if (session.accessToken) {
+    try {
+      analytics = await getEmailAnalytics(session.accessToken, 200);
+    } catch (error) {
+      analyticsError =
+        error instanceof Error ? error.message : "Failed to load analytics.";
+    }
   }
 
   async function deleteSelectedEmails(
@@ -173,6 +190,33 @@ export default async function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+        <section className="mb-8 space-y-6">
+          {analyticsError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+              {analyticsError}
+            </div>
+          ) : analytics ? (
+            <>
+              <AnalyticsOverview
+                stats={analytics.overview}
+                analyzedEmailCount={analytics.analyzedEmailCount}
+                maxAnalyzed={analytics.maxAnalyzed}
+              />
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <TopSenders senders={analytics.topSenders} />
+                <AttachmentInsights stats={analytics.attachmentStats} />
+              </div>
+
+              <CleanupCandidates candidates={analytics.cleanupCandidates} />
+            </>
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+              Analytics unavailable. Reconnect Gmail if this continues.
+            </div>
+          )}
+        </section>
+
         <FilterBuilder
           onPreview={previewFilterAction}
           onArchive={archiveFilterAction}

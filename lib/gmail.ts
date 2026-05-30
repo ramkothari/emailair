@@ -297,7 +297,7 @@ export async function searchEmails(
   };
 }
 
-function getGmailClient(accessToken: string) {
+export function getGmailClient(accessToken: string) {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
 
