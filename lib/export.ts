@@ -14,6 +14,15 @@ function sanitizeFileName(value: string): string {
   return cleaned.length > 0 ? cleaned.slice(0, 120) : "email";
 }
 
+// Sanitize text for PDF rendering - WinAnsi font can't encode tabs and control characters
+function sanitizeForPDF(text: string): string {
+  return text
+    .replace(/\t/g, "    ") // Replace tabs with 4 spaces
+    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, " ") // Replace control chars with space
+    .replace(/\r\n/g, "\n") // Normalize line endings
+    .trim();
+}
+
 function formatDateForFolder(dateStr: string): string {
   try {
     const date = new Date(dateStr);
@@ -29,9 +38,10 @@ function wrapText(
   fontSize: number,
   maxWidth: number
 ): string[] {
+  const sanitizedText = sanitizeForPDF(text);
   const lines: string[] = [];
 
-  for (const paragraph of text.split("\n")) {
+  for (const paragraph of sanitizedText.split("\n")) {
     const words = paragraph.split(" ");
     let currentLine = "";
 
@@ -89,10 +99,11 @@ export async function createEmailPdf(email: EmailDetails): Promise<Uint8Array> {
   ): void {
     const size = options?.size || 11;
     const font = options?.bold ? boldFont : regularFont;
+    const sanitizedText = sanitizeForPDF(text);
 
     addPageIfNeeded(size + 8);
 
-    page.drawText(text, {
+    page.drawText(sanitizedText, {
       x: margin,
       y,
       size,
