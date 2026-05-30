@@ -1,12 +1,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmailTable } from "@/components/EmailTable";
+import { FilterBuilder } from "@/components/FilterBuilder";
 import { auth, signOut } from "@/lib/auth";
 import {
   archiveEmails,
   deleteEmails,
   getRecentEmails,
 } from "@/lib/gmail";
+import {
+  previewFilterAction,
+  archiveFilterAction,
+  deleteFilterAction,
+} from "@/app/actions/filter-actions";
 import type { Email, EmailActionResult } from "@/types/email";
 
 function getGmailErrorMessage(error: unknown): string {
@@ -166,7 +172,13 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+        <FilterBuilder
+          onPreview={previewFilterAction}
+          onArchive={archiveFilterAction}
+          onDelete={deleteFilterAction}
+        />
+
         <div className="rounded-lg bg-white shadow">
           <div className="border-b px-6 py-4">
             <h2 className="text-lg font-semibold text-gray-900">
