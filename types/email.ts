@@ -3,6 +3,7 @@ export type Email = {
   sender: string;
   subject: string;
   date: string;
+  snippet?: string;
 };
 
 export type EmailActionResult = {

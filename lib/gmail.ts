@@ -78,17 +78,18 @@ export async function getRecentEmails(
         const messageResponse = await gmail.users.messages.get({
           userId: "me",
           id: message.id,
-          format: "metadata",
-          metadataHeaders: ["From", "Subject", "Date"],
+          format: "full",
         });
 
         const headers = messageResponse.data.payload?.headers;
+        const snippet = messageResponse.data.snippet ?? undefined;
 
         return {
           id: message.id,
           sender: getHeader(headers, "From") || "Unknown sender",
           subject: getHeader(headers, "Subject") || "(No subject)",
           date: getHeader(headers, "Date") || "Unknown date",
+          snippet,
         };
       })
     );

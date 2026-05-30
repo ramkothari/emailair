@@ -135,72 +135,48 @@ export function FilterBuilder({
     });
   }
 
-  function handleArchive() {
-    if (!preview || !previewFilter) {
-      setError("Preview results before archiving.");
-      return;
+  async function handleArchiveSelected(selectedIds: string[]) {
+    if (!previewFilter) {
+      throw new Error("No filter set.");
     }
 
-    const emailIds = preview.emails.map((email) => email.id);
+    const result = await onArchive(previewFilter, selectedIds);
 
-    if (emailIds.length === 0) {
-      setError("No emails to archive.");
-      return;
+    if (!result.ok) {
+      throw new Error(result.error);
     }
 
-    startTransition(async () => {
-      setError(null);
-      setMessage(null);
-
-      const result = await onArchive(previewFilter, emailIds);
-
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-
-      setPreview(result.data);
-      setMessage(result.message ?? `Archived ${emailIds.length} emails.`);
-      router.refresh();
-    });
+    router.refresh();
   }
 
-  function handleDelete() {
-    if (!preview || !previewFilter) {
-      setError("Preview results before deleting.");
+  async function handleDeleteSelected(selectedIds: string[]) {
+    if (!previewFilter) {
+      throw new Error("No filter set.");
+    }
+
+    const result = await onDelete(previewFilter, selectedIds);
+
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    router.refresh();
+  }
+
+  async function handleRefreshPreview() {
+    if (!previewFilter) {
       return;
     }
 
-    const emailIds = preview.emails.map((email) => email.id);
+    const result = await onPreview(previewFilter);
 
-    if (emailIds.length === 0) {
-      setError("No emails to delete.");
+    if (!result.ok) {
+      setPreview(null);
+      setError(result.error);
       return;
     }
 
-    const confirmed = window.confirm(
-      `Move ${emailIds.length} previewed emails to Trash?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    startTransition(async () => {
-      setError(null);
-      setMessage(null);
-
-      const result = await onDelete(previewFilter, emailIds);
-
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-
-      setPreview(result.data);
-      setMessage(result.message ?? `Deleted ${emailIds.length} emails.`);
-      router.refresh();
-    });
+    setPreview(result.data);
   }
 
   function handleClear() {
@@ -321,28 +297,6 @@ export function FilterBuilder({
         >
           Clear
         </button>
-
-        {preview && preview.emails.length > 0 ? (
-          <>
-            <button
-              type="button"
-              onClick={handleArchive}
-              disabled={isPending}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Archive Matching Emails
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isPending}
-              className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Delete Matching Emails
-            </button>
-          </>
-        ) : null}
       </div>
 
       {error ? (
@@ -361,6 +315,11 @@ export function FilterBuilder({
         <FilterPreview
           totalMatches={preview.totalMatches}
           emails={preview.emails}
+          isLoading={isPending}
+          error={error}
+          onArchiveSelected={handleArchiveSelected}
+          onDeleteSelected={handleDeleteSelected}
+          onRefreshPreview={handleRefreshPreview}
         />
       ) : null}
     </section>
