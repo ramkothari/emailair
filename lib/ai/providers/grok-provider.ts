@@ -13,11 +13,13 @@ export class GrokProvider extends BaseProvider {
   }
 
   async complete(prompt: string): Promise<string> {
+    const authHeader = `Bearer ${this.apiKey}`;
+
     const response = await fetch(this.endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: authHeader,
       },
       body: JSON.stringify({
         model: this.model,

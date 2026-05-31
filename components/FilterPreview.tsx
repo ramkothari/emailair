@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Email } from "@/types/email";
+import type { EmailMetadata } from "@/lib/ai";
 import { EmailViewer } from "@/components/EmailViewer";
 import { ExportSelectedButton } from "@/components/ExportSelectedButton";
+import { AIAnalysisCard } from "@/components/AIAnalysisCard";
 
 export type FilterPreviewEmail = Email & {
   id: string;
@@ -46,6 +48,17 @@ export function FilterPreview({
   const selectedCount = selectedIds.size;
   const hasEmails = emails.length > 0;
   const allSelected = hasEmails && selectedCount === emails.length;
+
+  const emailMetadata: EmailMetadata[] = useMemo(
+    () =>
+      emails.map((email) => ({
+        sender: email.sender || "Unknown sender",
+        subject: email.subject || "(No subject)",
+        snippet: email.snippet || "",
+        date: email.date || "Unknown date",
+      })),
+    [emails]
+  );
 
   useEffect(() => {
     setSelectedIds((currentSelectedIds) => {
@@ -276,6 +289,8 @@ export function FilterPreview({
           </div>
         </div>
       ) : null}
+
+      <AIAnalysisCard emails={emailMetadata} />
 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">

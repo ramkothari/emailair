@@ -15,22 +15,24 @@ import { ClaudeProvider } from "./providers/claude-provider";
 export type SupportedProvider = "openai" | "grok" | "gemini" | "deepseek" | "claude";
 
 export class ProviderFactory {
-  private static instance: BaseProvider | null = null;
-
+  /**
+   * IMPORTANT: We intentionally do NOT cache the provider instance
+   * This ensures environment variables are loaded fresh each time
+   * Previously, singleton caching could cause stale API keys to be used
+   * After .env.local updates, old keys would persist in cached provider
+   * 
+   * Solution: Create new provider on each call to pick up latest env vars
+   */
+  
   static getProvider(): BaseProvider {
-    if (this.instance) {
-      return this.instance;
-    }
-
     const providerName = (process.env.AI_PROVIDER || "openai").toLowerCase();
     const config = this.getProviderConfig(providerName);
 
-    this.instance = this.createProvider(providerName, config);
-    return this.instance;
+    return this.createProvider(providerName, config);
   }
 
   static reset(): void {
-    this.instance = null;
+    // No-op: We don't cache anymore, so nothing to reset
   }
 
   private static createProvider(
