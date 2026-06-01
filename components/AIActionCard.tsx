@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { AnalysisResult, RiskResult, SummaryResult } from "@/lib/ai";
 
 type AIActionCardProps = {
@@ -10,9 +10,10 @@ type AIActionCardProps = {
   totalEmailsFound: number;
   emailsAnalyzed: number;
   analyzedAt: string;
+  isExecuting?: boolean;
+  onArchiveSearchResults?: () => void;
+  onMoveSearchResultsToTrash?: () => void;
 };
-
-const PLACEHOLDER_MESSAGE = "Execution engine coming in Phase 9.2";
 
 function formatTimestamp(isoString: string): string {
   try {
@@ -46,17 +47,14 @@ export function AIActionCard({
   totalEmailsFound,
   emailsAnalyzed,
   analyzedAt,
+  isExecuting = false,
+  onArchiveSearchResults,
+  onMoveSearchResultsToTrash,
 }: AIActionCardProps) {
-  const [message, setMessage] = useState<string | null>(null);
-
   const riskColor = useMemo(
     () => getRiskBadgeClasses(risk.riskLevel),
     [risk.riskLevel]
   );
-
-  function handlePlaceholderClick() {
-    setMessage(PLACEHOLDER_MESSAGE);
-  }
 
   return (
     <section className="rounded-lg border bg-white p-4 shadow-sm">
@@ -170,47 +168,34 @@ export function AIActionCard({
         </div>
       </div>
 
-      {/* Action Buttons (Placeholders) */}
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={handlePlaceholderClick}
-          className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          onClick={onArchiveSearchResults}
+          disabled={isExecuting || totalEmailsFound === 0 || !onArchiveSearchResults}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Archive Safe Emails
+          Archive Results
         </button>
 
         <button
           type="button"
-          onClick={handlePlaceholderClick}
-          className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+          onClick={onMoveSearchResultsToTrash}
+          disabled={isExecuting || totalEmailsFound === 0 || !onMoveSearchResultsToTrash}
+          className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Delete Safe Emails
+          Move Results To Trash
         </button>
 
         <button
           type="button"
-          onClick={handlePlaceholderClick}
-          className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          disabled
+          title="Download execution is deferred."
+          className="rounded-md border px-4 py-2 text-sm font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Download Safe Emails
-        </button>
-
-        <button
-          type="button"
-          onClick={handlePlaceholderClick}
-          className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Review Important Emails
+          Download Search Results
         </button>
       </div>
-
-      {/* Placeholder Message */}
-      {message && (
-        <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          {message}
-        </div>
-      )}
     </section>
   );
 }

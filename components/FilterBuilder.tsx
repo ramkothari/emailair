@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Email } from "@/types/email";
 import type { EmailFilter } from "@/types/filter";
@@ -34,13 +33,7 @@ type FilterBuilderProps = {
   ) => Promise<FilterActionResult>;
 };
 
-export function FilterBuilder({
-  onPreview,
-  onArchive,
-  onDelete,
-}: FilterBuilderProps) {
-  const router = useRouter();
-
+export function FilterBuilder({ onPreview }: FilterBuilderProps) {
   const [sender, setSender] = useState("");
   const [subject, setSubject] = useState("");
   const [olderThanDays, setOlderThanDays] = useState("");
@@ -135,34 +128,6 @@ export function FilterBuilder({
     });
   }
 
-  async function handleArchiveSelected(selectedIds: string[]) {
-    if (!previewFilter) {
-      throw new Error("No filter set.");
-    }
-
-    const result = await onArchive(previewFilter, selectedIds);
-
-    if (!result.ok) {
-      throw new Error(result.error);
-    }
-
-    router.refresh();
-  }
-
-  async function handleDeleteSelected(selectedIds: string[]) {
-    if (!previewFilter) {
-      throw new Error("No filter set.");
-    }
-
-    const result = await onDelete(previewFilter, selectedIds);
-
-    if (!result.ok) {
-      throw new Error(result.error);
-    }
-
-    router.refresh();
-  }
-
   async function handleRefreshPreview() {
     if (!previewFilter) {
       return;
@@ -193,7 +158,7 @@ export function FilterBuilder({
         <h2 className="text-xl font-semibold text-gray-900">Filter Builder</h2>
         <p className="mt-1 text-sm text-gray-500">
           Search Gmail using simple filters, preview matches, then manually
-          archive or delete previewed emails.
+          archive or move previewed emails to Trash.
         </p>
       </div>
 
@@ -317,8 +282,6 @@ export function FilterBuilder({
           emails={preview.emails}
           isLoading={isPending}
           error={error}
-          onArchiveSelected={handleArchiveSelected}
-          onDeleteSelected={handleDeleteSelected}
           onRefreshPreview={handleRefreshPreview}
         />
       ) : null}

@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Email } from "@/types/email";
-import type { EmailMetadata } from "@/lib/ai";
-import type { AnalyzeSearchResponse } from "@/components/AIAnalysisCard";
-import { EmailViewer } from "@/components/EmailViewer";
-import { ExportSelectedButton } from "@/components/ExportSelectedButton";
-import { AIAnalysisCard } from "@/components/AIAnalysisCard";
+import { executeBulkAction } from "@/app/actions/execution-actions";
 import { AIActionCard } from "@/components/AIActionCard";
+import { AIAnalysisCard } from "@/components/AIAnalysisCard";
+import { EmailViewer } from "@/components/EmailViewer";
+import { ExecutionConfirmationModal } from "@/components/ExecutionConfirmationModal";
+import { ExecutionResultModal } from "@/components/ExecutionResultModal";
+import { ExportSelectedButton } from "@/components/ExportSelectedButton";
+import type { AnalyzeSearchResponse } from "@/components/AIAnalysisCard";
+import type { EmailMetadata } from "@/lib/ai";
+import type { ActionType, ExecuteActionResult } from "@/lib/executor/types";
+import type { Email } from "@/types/email";
+
 const AI_ANALYSIS_EMAIL_LIMIT = 100;
+const EXECUTION_LIMIT = 100;
+const EXECUTION_LIMIT_MESSAGE =
+  "Archive and Move To Trash support up to 100 emails per execution. Please narrow your search or select fewer emails.";
 
 export type FilterPreviewEmail = Email & {
   id: string;
@@ -23,35 +31,52 @@ type FilterPreviewProps = {
   emails: Email[];
   isLoading?: boolean;
   error?: string | null;
-  onArchiveSelected: (ids: string[]) => Promise<void>;
-  onDeleteSelected: (ids: string[]) => Promise<void>;
   onRefreshPreview: () => Promise<void>;
 };
+
+type SupportedExecutionAction = Extract<ActionType, "archive" | "delete">;
+
+type ExecutionTarget = {
+  action: SupportedExecutionAction;
+  ids: string[];
+  riskLevel?: string | null;
+};
+
+function normalizeExecutionIds(ids: string[]): string[] {
+  return Array.from(
+    new Set(
+      ids
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0)
+    )
+  );
+}
 
 export function FilterPreview({
   totalMatches,
   emails,
   isLoading = false,
   error = null,
-  onArchiveSelected,
-  onDeleteSelected,
   onRefreshPreview,
 }: FilterPreviewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deleteConfirmData, setDeleteConfirmData] = useState<{
-    count: number;
-  } | null>(null);
   const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeSearchResponse | null>(null);
+  const [executionTarget, setExecutionTarget] = useState<ExecutionTarget | null>(null);
+  const [resultTarget, setResultTarget] = useState<ExecutionTarget | null>(null);
+  const [executionResult, setExecutionResult] = useState<ExecuteActionResult | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [isExecutingAction, setIsExecutingAction] = useState(false);
 
   const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
-
+  const searchResultEmailIds = useMemo(
+    () => Array.from(new Set(emails.map((email) => email.id))),
+    [emails]
+  );
   const selectedCount = selectedIds.size;
   const hasEmails = emails.length > 0;
   const allSelected = hasEmails && selectedCount === emails.length;
+  const riskLevel = analysisResult?.risk.riskLevel ?? null;
 
   const emailMetadata: EmailMetadata[] = useMemo(
     () =>
@@ -80,9 +105,6 @@ export function FilterPreview({
   }, [emailIds]);
 
   function toggleEmailSelection(emailId: string) {
-    setActionError(null);
-    setActionMessage(null);
-
     setSelectedIds((currentSelectedIds) => {
       const nextSelectedIds = new Set(currentSelectedIds);
 
@@ -97,83 +119,99 @@ export function FilterPreview({
   }
 
   function selectAllEmails() {
-    setActionError(null);
-    setActionMessage(null);
     setSelectedIds(new Set(emailIds));
   }
 
   function clearSelection() {
-    setActionError(null);
-    setActionMessage(null);
     setSelectedIds(new Set());
   }
 
-  async function handleArchiveSelected() {
-    await runSelectedAction("archive");
-  }
+  function requestExecution(
+    action: SupportedExecutionAction,
+    ids: string[],
+    targetRiskLevel?: string | null
+  ) {
+    const normalizedIds = normalizeExecutionIds(ids);
 
-  async function handleDeleteSelected() {
-    if (selectedIds.size === 0) {
-      setActionError("Select at least one email.");
+    setExecutionError(null);
+
+    if (normalizedIds.length === 0) {
+      setExecutionError("Select at least one email to continue.");
+      setExecutionResult(null);
+      setResultTarget({ action, ids: [], riskLevel: targetRiskLevel });
       return;
     }
 
-    setDeleteConfirmData({ count: selectedIds.size });
-  }
-
-  async function confirmDelete() {
-    setDeleteConfirmData(null);
-    await runSelectedAction("delete");
-  }
-
-  function cancelDelete() {
-    setDeleteConfirmData(null);
-  }
-
-  async function runSelectedAction(action: "archive" | "delete") {
-    setActionError(null);
-    setActionMessage(null);
-
-    if (selectedIds.size === 0) {
-      setActionError("Select at least one email.");
+    if (normalizedIds.length > EXECUTION_LIMIT) {
+      setExecutionError(EXECUTION_LIMIT_MESSAGE);
+      setExecutionResult(null);
+      setResultTarget({ action, ids: normalizedIds, riskLevel: targetRiskLevel });
       return;
     }
 
-    const ids = Array.from(selectedIds);
+    setExecutionTarget({
+      action,
+      ids: normalizedIds,
+      riskLevel: targetRiskLevel,
+    });
+  }
+
+  async function confirmExecution() {
+    if (!executionTarget) {
+      return;
+    }
+
+    setIsExecutingAction(true);
+    setExecutionError(null);
 
     try {
-      setIsSubmitting(true);
+      const response = await executeBulkAction({
+        action: executionTarget.action,
+        emailIds: executionTarget.ids,
+      });
 
-      if (action === "archive") {
-        await onArchiveSelected(ids);
-        setActionMessage(
-          ids.length === 1
-            ? "Archived 1 selected email."
-            : `Archived ${ids.length} selected emails.`
-        );
-      } else {
-        await onDeleteSelected(ids);
-        setActionMessage(
-          ids.length === 1
-            ? "Moved 1 selected email to Trash."
-            : `Moved ${ids.length} selected emails to Trash.`
-        );
+      setResultTarget(executionTarget);
+      setExecutionTarget(null);
+
+      if (!response.ok) {
+        setExecutionResult(null);
+        setExecutionError(response.error);
+        return;
       }
 
-      setSelectedIds(new Set());
-      await onRefreshPreview();
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : action === "archive"
-            ? "Failed to archive selected emails."
-            : "Failed to delete selected emails.";
+      setExecutionResult(response.result);
 
-      setActionError(message);
+      if (response.result.succeeded === response.result.total) {
+        setSelectedIds(new Set());
+        await onRefreshPreview();
+      }
+    } catch (error) {
+      setResultTarget(executionTarget);
+      setExecutionTarget(null);
+      setExecutionResult(null);
+      setExecutionError(
+        error instanceof Error
+          ? error.message
+          : "Execution failed. Please try again."
+      );
     } finally {
-      setIsSubmitting(false);
+      setIsExecutingAction(false);
     }
+  }
+
+  function retryFailedExecution() {
+    if (!resultTarget || !executionResult?.failedIds.length) {
+      return;
+    }
+
+    setExecutionResult(null);
+    setExecutionError(null);
+    setResultTarget(null);
+    setExecutionTarget({
+      action: resultTarget.action,
+      ids: executionResult.failedIds,
+      riskLevel: resultTarget.riskLevel,
+    });
   }
 
   if (isLoading) {
@@ -201,6 +239,9 @@ export function FilterPreview({
     );
   }
 
+  const actionModalAction =
+    executionTarget?.action ?? resultTarget?.action ?? "archive";
+
   return (
     <div className="rounded-lg border bg-white">
       <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -209,10 +250,7 @@ export function FilterPreview({
             Found {emails.length} {emails.length === 1 ? "email" : "emails"}
           </p>
           <p className="mt-1 text-sm text-gray-600">
-            Selected:{" "}
-            <span className="font-semibold">
-              {selectedCount} of {emails.length} previewed
-            </span>
+            Selected: {selectedCount} of {emails.length} previewed
           </p>
         </div>
 
@@ -220,7 +258,7 @@ export function FilterPreview({
           <button
             type="button"
             onClick={selectAllEmails}
-            disabled={isSubmitting || allSelected}
+            disabled={isExecutingAction || allSelected}
             className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Select All
@@ -229,7 +267,7 @@ export function FilterPreview({
           <button
             type="button"
             onClick={clearSelection}
-            disabled={isSubmitting || selectedCount === 0}
+            disabled={isExecutingAction || selectedCount === 0}
             className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Clear Selection
@@ -237,62 +275,25 @@ export function FilterPreview({
 
           <button
             type="button"
-            onClick={handleArchiveSelected}
-            disabled={isSubmitting || selectedCount === 0}
-            className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => requestExecution("archive", Array.from(selectedIds), riskLevel)}
+            disabled={isExecutingAction || selectedCount === 0}
+            className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "Archiving..." : "Archive Selected"}
+            Archive Selected
           </button>
 
           <button
             type="button"
-            onClick={handleDeleteSelected}
-            disabled={isSubmitting || selectedCount === 0}
-            className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => requestExecution("delete", Array.from(selectedIds), riskLevel)}
+            disabled={isExecutingAction || selectedCount === 0}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? "Deleting..." : "Delete Selected"}
+            Move Selected To Trash
           </button>
 
           <ExportSelectedButton selectedMessageIds={Array.from(selectedIds)} />
         </div>
       </div>
-
-      {actionError ? (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm font-medium text-red-700">{actionError}</p>
-        </div>
-      ) : null}
-
-      {actionMessage ? (
-        <div className="border-b border-green-200 bg-green-50 px-4 py-3">
-          <p className="text-sm font-medium text-green-700">{actionMessage}</p>
-        </div>
-      ) : null}
-
-      {deleteConfirmData ? (
-        <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-3">
-          <p className="text-sm font-medium text-yellow-800">
-            Move {deleteConfirmData.count}{" "}
-            {deleteConfirmData.count === 1 ? "email" : "emails"} to Trash?
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={confirmDelete}
-              className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700"
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={cancelDelete}
-              className="rounded-md border px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       <AIAnalysisCard
         emails={emailMetadata.slice(0, AI_ANALYSIS_EMAIL_LIMIT)}
@@ -307,6 +308,13 @@ export function FilterPreview({
           totalEmailsFound={totalMatches}
           emailsAnalyzed={analysisResult.analyzedCount}
           analyzedAt={analysisResult.analyzedAt}
+          isExecuting={isExecutingAction}
+          onArchiveSearchResults={() =>
+            requestExecution("archive", searchResultEmailIds, riskLevel)
+          }
+          onMoveSearchResultsToTrash={() =>
+            requestExecution("delete", searchResultEmailIds, riskLevel)
+          }
         />
       ) : null}
 
@@ -325,7 +333,7 @@ export function FilterPreview({
                       selectAllEmails();
                     }
                   }}
-                  disabled={isSubmitting}
+                  disabled={isExecutingAction}
                   aria-label="Select all preview emails"
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -361,7 +369,7 @@ export function FilterPreview({
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleEmailSelection(email.id)}
-                      disabled={isSubmitting}
+                      disabled={isExecutingAction}
                       aria-label={`Select email from ${email.sender}`}
                       className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -404,12 +412,39 @@ export function FilterPreview({
         </table>
       </div>
 
-      {viewingEmailId && (
+      {viewingEmailId ? (
         <EmailViewer
           messageId={viewingEmailId}
           onClose={() => setViewingEmailId(null)}
         />
-      )}
+      ) : null}
+
+      <ExecutionConfirmationModal
+        open={Boolean(executionTarget)}
+        action={executionTarget?.action ?? "archive"}
+        emailCount={executionTarget?.ids.length ?? 0}
+        riskLevel={executionTarget?.riskLevel}
+        isExecuting={isExecutingAction}
+        onCancel={() => {
+          if (!isExecutingAction) {
+            setExecutionTarget(null);
+          }
+        }}
+        onConfirm={confirmExecution}
+      />
+
+      <ExecutionResultModal
+        open={Boolean(resultTarget) || Boolean(executionError)}
+        action={actionModalAction}
+        result={executionResult}
+        error={executionError}
+        onClose={() => {
+          setResultTarget(null);
+          setExecutionResult(null);
+          setExecutionError(null);
+        }}
+        onRetry={retryFailedExecution}
+      />
     </div>
   );
 }

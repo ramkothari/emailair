@@ -1,0 +1,1267 @@
+================================================================================
+EMAILAIR - IMPLEMENTATION REFERENCE
+Complete Server Actions, API Routes, and Gmail Integration Files
+================================================================================
+
+================================================================================
+1. SERVER/PAGE ACTIONS - app/actions/filter-actions.ts
+================================================================================
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import {
+  archiveEmails,
+  deleteEmails,
+  searchEmails,
+} from "@/lib/gmail";
+import type { Email } from "@/types/email";
+import type { EmailFilter } from "@/types/filter";
+
+export type FilterActionResult =
+  | {
+      ok: true;
+      data: {
+        totalMatches: number;
+        emails: Email[];
+      };
+      message?: string;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+function getGmailErrorMessage(error: unknown): string {
+  const possibleGoogleError = error as {
+    code?: number;
+    response?: {
+      status?: number;
+      data?: {
+        error?: {
+          message?: string;
+        };
+      };
+    };
+    message?: string;
+  };
+
+  const status =
+    possibleGoogleError.response?.status ?? possibleGoogleError.code;
+
+  if (status === 401) {
+    return "Google access token expired. Sign out and connect Gmail again.";
+  }
+
+  if (status === 403) {
+    return "Missing Gmail permissions. Reconnect your Google account and grant Gmail access.";
+  }
+
+  return (
+    possibleGoogleError.response?.data?.error?.message ??
+    possibleGoogleError.message ??
+    "Gmail API request failed."
+  );
+}
+
+export async function previewFilterAction(
+  filter: EmailFilter
+): Promise<FilterActionResult> {
+  const currentSession = await auth();
+
+  if (!currentSession?.accessToken) {
+    return {
+      ok: false,
+      error: "You are not authenticated. Please reconnect Gmail.",
+    };
+  }
+
+  try {
+    const data = await searchEmails(currentSession.accessToken, filter, 50);
+
+    return {
+      ok: true,
+      data,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: getGmailErrorMessage(error),
+    };
+  }
+}
+
+export async function archiveFilterAction(
+  filter: EmailFilter,
+  emailIds: string[]
+): Promise<FilterActionResult> {
+  const currentSession = await auth();
+
+  if (!currentSession?.accessToken) {
+    return {
+      ok: false,
+      error: "You are not authenticated. Please reconnect Gmail.",
+    };
+  }
+
+  if (emailIds.length === 0) {
+    return {
+      ok: false,
+      error: "No emails selected for archive.",
+    };
+  }
+
+  try {
+    await archiveEmails(currentSession.accessToken, emailIds);
+
+    revalidatePath("/dashboard");
+
+    const data = await searchEmails(currentSession.accessToken, filter, 50);
+
+    return {
+      ok: true,
+      data,
+      message: `Archived ${emailIds.length} emails. Results refreshed.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: getGmailErrorMessage(error),
+    };
+  }
+}
+
+export async function deleteFilterAction(
+  filter: EmailFilter,
+  emailIds: string[]
+): Promise<FilterActionResult> {
+  const currentSession = await auth();
+
+  if (!currentSession?.accessToken) {
+    return {
+      ok: false,
+      error: "You are not authenticated. Please reconnect Gmail.",
+    };
+  }
+
+  if (emailIds.length === 0) {
+    return {
+      ok: false,
+      error: "No emails selected for delete.",
+    };
+  }
+
+  try {
+    await deleteEmails(currentSession.accessToken, emailIds);
+
+    revalidatePath("/dashboard");
+
+    const data = await searchEmails(currentSession.accessToken, filter, 50);
+
+    return {
+      ok: true,
+      data,
+      message: `Moved ${emailIds.length} emails to Trash. Results refreshed.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: getGmailErrorMessage(error),
+    };
+  }
+}
+
+================================================================================
+USAGE IN FilterBuilder:
+  - onArchive = archiveFilterAction
+  - onDelete = deleteFilterAction
+================================================================================
+
+================================================================================
+2. GMAIL HELPERS - lib/gmail.ts
+================================================================================
+import { google } from "googleapis";
+import type { gmail_v1 } from "googleapis";
+import type { Email } from "@/types/email";
+import type { EmailFilter } from "@/types/filter";
+
+function getHeader(
+  headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
+  name: string
+): string {
+  if (!headers) {
+    return "";
+  }
+
+  const header = headers.find(
+    (item) => item.name?.toLowerCase() === name.toLowerCase()
+  );
+
+  return header?.value ?? "";
+}
+
+function getGmailErrorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "number"
+  ) {
+    if (error.code === 401) {
+      return "Your Google access token is expired or invalid. Please sign out and connect Gmail again.";
+    }
+
+    if (error.code === 403) {
+      return "Missing Gmail permissions. Please reconnect and approve Gmail read access.";
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Failed to fetch Gmail emails.";
+}
+
+export async function getRecentEmails(
+  accessToken: string,
+  limit: number = 20
+): Promise<Email[]> {
+  try {
+    const auth = new google.auth.OAuth2();
+
+    auth.setCredentials({
+      access_token: accessToken,
+    });
+
+    const gmail = google.gmail({
+      version: "v1",
+      auth,
+    });
+
+    const listResponse = await gmail.users.messages.list({
+      userId: "me",
+      maxResults: limit,
+      labelIds: ["INBOX"],
+    });
+
+    const messages = listResponse.data.messages ?? [];
+
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const emails = await Promise.all(
+      messages.map(async (message): Promise<Email> => {
+        if (!message.id) {
+          throw new Error("Gmail message is missing an ID.");
+        }
+
+        const messageResponse = await gmail.users.messages.get({
+          userId: "me",
+          id: message.id,
+          format: "full",
+        });
+
+        const headers = messageResponse.data.payload?.headers;
+        const snippet = messageResponse.data.snippet ?? undefined;
+
+        return {
+          id: message.id,
+          sender: getHeader(headers, "From") || "Unknown sender",
+          subject: getHeader(headers, "Subject") || "(No subject)",
+          date: getHeader(headers, "Date") || "Unknown date",
+          snippet,
+        };
+      })
+    );
+
+    return emails;
+  } catch (error) {
+    throw new Error(getGmailErrorMessage(error));
+  }
+}
+
+export async function deleteEmails(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const auth = new google.auth.OAuth2();
+
+  auth.setCredentials({
+    access_token: accessToken,
+  });
+
+  const gmail = google.gmail({
+    version: "v1",
+    auth,
+  });
+
+  await Promise.all(
+    ids.map((id) =>
+      gmail.users.messages.trash({
+        userId: "me",
+        id,
+      })
+    )
+  );
+}
+
+export async function archiveEmails(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const auth = new google.auth.OAuth2();
+
+  auth.setCredentials({
+    access_token: accessToken,
+  });
+
+  const gmail = google.gmail({
+    version: "v1",
+    auth,
+  });
+
+  await Promise.all(
+    ids.map((id) =>
+      gmail.users.messages.modify({
+        userId: "me",
+        id,
+        requestBody: {
+          removeLabelIds: ["INBOX"],
+        },
+      })
+    )
+  );
+}
+
+function formatGmailSearchValue(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const escaped = trimmed.replace(/"/g, '\\"');
+
+  if (/\s/.test(escaped)) {
+    return `"${escaped}"`;
+  }
+
+  return escaped;
+}
+
+function buildGmailSearchQuery(filter: EmailFilter): string {
+  const queryParts: string[] = [];
+
+  if (filter.sender?.trim()) {
+    queryParts.push(`from:${formatGmailSearchValue(filter.sender)}`);
+  }
+
+  if (filter.subject?.trim()) {
+    queryParts.push(`subject:${formatGmailSearchValue(filter.subject)}`);
+  }
+
+  if (filter.hasAttachment) {
+    queryParts.push("has:attachment");
+  }
+
+  if (filter.olderThanDays !== undefined) {
+    if (
+      !Number.isFinite(filter.olderThanDays) ||
+      !Number.isInteger(filter.olderThanDays) ||
+      filter.olderThanDays <= 0
+    ) {
+      throw new Error("Invalid filter: olderThanDays must be a positive number.");
+    }
+
+    queryParts.push(`older_than:${filter.olderThanDays}d`);
+  }
+
+  if (queryParts.length === 0) {
+    throw new Error("Invalid filter: add at least one filter.");
+  }
+
+  return queryParts.join(" ");
+}
+
+function getGmailHeaderForSearch(
+  headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
+  name: string
+): string {
+  return (
+    headers?.find(
+      (header) => header.name?.toLowerCase() === name.toLowerCase()
+    )?.value ?? ""
+  );
+}
+
+function mapGmailMessageToEmail(
+  message: gmail_v1.Schema$Message
+): Email | null {
+  if (!message.id) {
+    return null;
+  }
+
+  const headers = message.payload?.headers;
+
+  return {
+    id: message.id,
+    sender: getGmailHeaderForSearch(headers, "From") || "Unknown sender",
+    subject: getGmailHeaderForSearch(headers, "Subject") || "(No Subject)",
+    date: getGmailHeaderForSearch(headers, "Date") || "Unknown date",
+  };
+}
+
+export async function searchEmails(
+  accessToken: string,
+  filter: EmailFilter,
+  limit: number = 50
+): Promise<{
+  totalMatches: number;
+  emails: Email[];
+}> {
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  const query = buildGmailSearchQuery(filter);
+
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({
+    access_token: accessToken,
+  });
+
+  const gmail = google.gmail({
+    version: "v1",
+    auth,
+  });
+
+  const listResponse = await gmail.users.messages.list({
+    userId: "me",
+    q: query,
+    maxResults: safeLimit,
+  });
+
+  const messages = listResponse.data.messages ?? [];
+  const totalMatches = listResponse.data.resultSizeEstimate ?? messages.length;
+
+  if (messages.length === 0) {
+    return {
+      totalMatches,
+      emails: [],
+    };
+  }
+
+  const emailResponses = await Promise.all(
+    messages.map((message) =>
+      gmail.users.messages.get({
+        userId: "me",
+        id: message.id as string,
+        format: "metadata",
+        metadataHeaders: ["From", "Subject", "Date"],
+      })
+    )
+  );
+
+  const emails = emailResponses
+    .map((response) => mapGmailMessageToEmail(response.data))
+    .filter((email): email is Email => email !== null);
+
+  return {
+    totalMatches,
+    emails,
+  };
+}
+
+export function getGmailClient(accessToken: string) {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+
+  return google.gmail({ version: "v1", auth });
+}
+
+function decodeBase64Url(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64").toString("utf-8");
+}
+
+function decodeBase64UrlToBuffer(value: string): Buffer {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+
+  return Buffer.from(padded, "base64");
+}
+
+function htmlToReadableText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function collectEmailParts(
+  part: gmail_v1.Schema$MessagePart,
+  result: {
+    plainBodies: string[];
+    htmlBodies: string[];
+    attachments: Array<{
+      attachmentId: string;
+      filename: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }
+): void {
+  const mimeType = part.mimeType || "";
+  const filename = part.filename || "";
+  const body = part.body;
+
+  if (filename && body?.attachmentId) {
+    result.attachments.push({
+      attachmentId: body.attachmentId,
+      filename,
+      mimeType,
+      size: Number(body.size || 0),
+    });
+  }
+
+  if (body?.data && mimeType === "text/plain") {
+    result.plainBodies.push(decodeBase64Url(body.data));
+  }
+
+  if (body?.data && mimeType === "text/html") {
+    result.htmlBodies.push(decodeBase64Url(body.data));
+  }
+
+  for (const childPart of part.parts || []) {
+    collectEmailParts(childPart, result);
+  }
+}
+
+export async function getEmailDetails(
+  accessToken: string,
+  messageId: string
+) {
+  const gmail = getGmailClient(accessToken);
+
+  const response = await gmail.users.messages.get({
+    userId: "me",
+    id: messageId,
+    format: "full",
+  });
+
+  const message = response.data;
+  const payload = message.payload;
+
+  if (!payload) {
+    throw new Error("Email payload not found");
+  }
+
+  const headers = payload.headers;
+
+  const collected = {
+    plainBodies: [] as string[],
+    htmlBodies: [] as string[],
+    attachments: [] as Array<{
+      attachmentId: string;
+      filename: string;
+      mimeType: string;
+      size: number;
+    }>,
+  };
+
+  collectEmailParts(payload, collected);
+
+  const plainBody = collected.plainBodies.join("\n\n").trim();
+  const htmlBody = collected.htmlBodies.join("\n\n").trim();
+
+  const body =
+    plainBody ||
+    (htmlBody ? htmlToReadableText(htmlBody) : message.snippet || "");
+
+  return {
+    id: message.id || messageId,
+    sender: getHeader(headers, "From") || "Unknown sender",
+    recipient: getHeader(headers, "To") || "Unknown recipient",
+    subject: getHeader(headers, "Subject") || "(No Subject)",
+    date: getHeader(headers, "Date") || "",
+    body,
+    attachments: collected.attachments,
+  };
+}
+
+export async function getAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string
+): Promise<Buffer> {
+  const gmail = getGmailClient(accessToken);
+
+  const response = await gmail.users.messages.attachments.get({
+    userId: "me",
+    messageId,
+    id: attachmentId,
+  });
+
+  if (!response.data.data) {
+    return Buffer.alloc(0);
+  }
+
+  return decodeBase64UrlToBuffer(response.data.data);
+}
+
+================================================================================
+3. EXPORT UTILITIES - lib/export.ts
+================================================================================
+import JSZip from "jszip";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import type { DownloadedAttachment, EmailDetails } from "@/types/email";
+
+const MAX_EXPORT_SIZE_BYTES = 250 * 1024 * 1024; // 250 MB
+const MAX_EMAILS_PER_EXPORT = 50;
+
+function sanitizeFileName(value: string): string {
+  const cleaned = value
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.length > 0 ? cleaned.slice(0, 120) : "email";
+}
+
+// Sanitize text for PDF rendering - WinAnsi font can't encode tabs and control characters
+function sanitizeForPDF(text: string): string {
+  return text
+    .replace(/\t/g, "    ") // Replace tabs with 4 spaces
+    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, " ") // Replace control chars with space
+    .replace(/\r\n/g, "\n") // Normalize line endings
+    .trim();
+}
+
+function formatDateForFolder(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return date.toISOString().split("T")[0];
+  } catch {
+    return "unknown-date";
+  }
+}
+
+function wrapText(
+  text: string,
+  font: { widthOfTextAtSize: (text: string, size: number) => number },
+  fontSize: number,
+  maxWidth: number
+): string[] {
+  const sanitizedText = sanitizeForPDF(text);
+  const lines: string[] = [];
+
+  for (const paragraph of sanitizedText.split("\n")) {
+    const words = paragraph.split(" ");
+    let currentLine = "";
+
+    for (const word of words) {
+      const nextLine = currentLine ? `${currentLine} ${word}` : word;
+      const width = font.widthOfTextAtSize(nextLine, fontSize);
+
+      if (width <= maxWidth) {
+        currentLine = nextLine;
+      } else {
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+  }
+
+  return lines;
+}
+
+export async function createEmailPdf(email: EmailDetails): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+
+  const regularFont = await pdf.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 48;
+  const maxWidth = pageWidth - margin * 2;
+
+  let page = pdf.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  function addPageIfNeeded(requiredSpace = 20): void {
+    if (y - requiredSpace < margin) {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
+    }
+  }
+
+  function drawTextLine(
+    text: string,
+    options?: {
+      bold?: boolean;
+      size?: number;
+      color?: ReturnType<typeof rgb>;
+      gap?: number;
+    }
+  ): void {
+    const size = options?.size || 11;
+    const font = options?.bold ? boldFont : regularFont;
+    const sanitizedText = sanitizeForPDF(text);
+
+    addPageIfNeeded(size + 8);
+
+    page.drawText(sanitizedText, {
+      x: margin,
+      y,
+      size,
+      font,
+      color: options?.color || rgb(0, 0, 0),
+    });
+
+    y -= options?.gap || size + 8;
+  }
+
+  function drawWrappedText(
+    text: string,
+    options?: {
+      bold?: boolean;
+      size?: number;
+      gap?: number;
+    }
+  ): void {
+    const size = options?.size || 11;
+    const font = options?.bold ? boldFont : regularFont;
+    const lines = wrapText(text, font, size, maxWidth);
+
+    for (const line of lines) {
+      addPageIfNeeded(size + 8);
+
+      page.drawText(line || " ", {
+        x: margin,
+        y,
+        size,
+        font,
+        color: rgb(0, 0, 0),
+      });
+
+      y -= options?.gap || size + 6;
+    }
+  }
+
+  drawWrappedText(email.subject, {
+    bold: true,
+    size: 18,
+    gap: 24,
+  });
+
+  drawTextLine(`From: ${email.sender}`, { bold: true });
+  drawTextLine(`To: ${email.recipient}`, { bold: true });
+  drawTextLine(`Date: ${email.date}`, { bold: true });
+
+  y -= 8;
+  drawTextLine("Email Body", { bold: true, size: 14, gap: 20 });
+  drawWrappedText(email.body || "(No body content)", { size: 11, gap: 16 });
+
+  if (email.attachments.length > 0) {
+    y -= 12;
+    drawTextLine("Attachments", { bold: true, size: 14, gap: 20 });
+
+    for (const attachment of email.attachments) {
+      const sizeKb = Math.round(attachment.size / 1024);
+      drawWrappedText(
+        `- ${attachment.filename} (${attachment.mimeType || "unknown"}, ${sizeKb} KB)`,
+        { size: 11, gap: 16 }
+      );
+    }
+  }
+
+  y -= 20;
+  drawTextLine("_______________________________________________", {
+    size: 9,
+    gap: 12,
+  });
+  drawTextLine("Exported by Gmail Hygiene", { size: 9, gap: 4 });
+  drawTextLine(`Export Date: ${new Date().toISOString().split("T")[0]}`, {
+    size: 9,
+  });
+
+  return pdf.save();
+}
+
+export async function buildSingleEmailZip(
+  email: EmailDetails,
+  attachments: DownloadedAttachment[]
+): Promise<Buffer> {
+  const zip = new JSZip();
+  const pdfBytes = await createEmailPdf(email);
+
+  zip.file("email.pdf", pdfBytes);
+
+  const attachmentsFolder = zip.folder("attachments");
+
+  if (attachmentsFolder) {
+    for (const attachment of attachments) {
+      attachmentsFolder.file(
+        sanitizeFileName(attachment.filename),
+        attachment.data
+      );
+    }
+  }
+
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+  });
+}
+
+export async function buildMultipleEmailsZip(
+  emails: Array<{
+    email: EmailDetails;
+    attachments: DownloadedAttachment[];
+  }>
+): Promise<Buffer> {
+  if (emails.length > MAX_EMAILS_PER_EXPORT) {
+    throw new Error(`Cannot export more than ${MAX_EMAILS_PER_EXPORT} emails at once.`);
+  }
+
+  const zip = new JSZip();
+  const usedFolderNames = new Set<string>();
+  let totalSize = 0;
+
+  for (const item of emails) {
+    const dateStr = formatDateForFolder(item.email.date);
+    let folderName = `${dateStr}_${sanitizeFileName(item.email.subject)}`;
+
+    if (usedFolderNames.has(folderName)) {
+      folderName = `${folderName}-${item.email.id.slice(0, 8)}`;
+    }
+
+    usedFolderNames.add(folderName);
+
+    const emailFolder = zip.folder(folderName);
+
+    if (!emailFolder) {
+      continue;
+    }
+
+    const pdfBytes = await createEmailPdf(item.email);
+    totalSize += pdfBytes.length;
+
+    if (totalSize > MAX_EXPORT_SIZE_BYTES) {
+      throw new Error("Export size exceeds 250 MB limit. Try exporting fewer emails.");
+    }
+
+    emailFolder.file("email.pdf", pdfBytes);
+
+    const attachmentsFolder = emailFolder.folder("attachments");
+
+    if (attachmentsFolder) {
+      for (const attachment of item.attachments) {
+        totalSize += attachment.data.length;
+
+        if (totalSize > MAX_EXPORT_SIZE_BYTES) {
+          throw new Error("Export size exceeds 250 MB limit. Try exporting fewer emails.");
+        }
+
+        attachmentsFolder.file(
+          sanitizeFileName(attachment.filename),
+          attachment.data
+        );
+      }
+    }
+  }
+
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+  });
+}
+
+export function getSingleExportFileName(email: EmailDetails): string {
+  const dateStr = formatDateForFolder(email.date);
+  return `${dateStr}_${sanitizeFileName(email.subject)}.zip`;
+}
+
+================================================================================
+4. COMPONENT - components/ExportSelectedButton.tsx
+================================================================================
+"use client";
+
+import { useState } from "react";
+
+type ExportSelectedButtonProps = {
+  selectedMessageIds: string[];
+};
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+export function ExportSelectedButton({
+  selectedMessageIds,
+}: ExportSelectedButtonProps) {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function exportSelectedEmails() {
+    if (selectedMessageIds.length === 0) {
+      return;
+    }
+
+    setExporting(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/export/selected", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messageIds: selectedMessageIds,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error || "Failed to export selected emails");
+      }
+
+      const blob = await response.blob();
+
+      downloadBlob(blob, "emails-export.zip");
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error
+          ? exportError.message
+          : "Failed to export selected emails"
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={exportSelectedEmails}
+        disabled={selectedMessageIds.length === 0 || exporting}
+        className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {exporting
+          ? "Exporting..."
+          : `Export Selected (${selectedMessageIds.length})`}
+      </button>
+
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+================================================================================
+5. API ROUTES - app/api/export/selected/route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { getAttachment, getEmailDetails } from "@/lib/gmail";
+import { buildMultipleEmailsZip } from "@/lib/export";
+import type { DownloadedAttachment } from "@/types/email";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  const session = await auth();
+
+  if (!session?.accessToken) {
+    return NextResponse.json(
+      { error: "Not authenticated" },
+      { status: 401 }
+    );
+  }
+
+  const body = (await request.json()) as {
+    messageIds?: string[];
+  };
+
+  if (!Array.isArray(body.messageIds) || body.messageIds.length === 0) {
+    return NextResponse.json(
+      { error: "messageIds must be a non-empty array" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const exportItems = await Promise.all(
+      body.messageIds.map(async (messageId) => {
+        const email = await getEmailDetails(
+          session.accessToken as string,
+          messageId
+        );
+
+        const attachments: DownloadedAttachment[] = await Promise.all(
+          email.attachments.map(async (attachment) => {
+            const data = await getAttachment(
+              session.accessToken as string,
+              email.id,
+              attachment.attachmentId
+            );
+
+            return {
+              ...attachment,
+              data,
+            };
+          })
+        );
+
+        return {
+          email,
+          attachments,
+        };
+      })
+    );
+
+    const zip = await buildMultipleEmailsZip(exportItems);
+
+    return new Response(zip, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition":
+          "attachment; filename*=UTF-8''emails-export.zip",
+        "Content-Length": String(zip.length),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to export selected emails";
+
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
+  }
+}
+
+================================================================================
+6. API ROUTES - app/api/export/email/route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { getAttachment, getEmailDetails } from "@/lib/gmail";
+import { buildSingleEmailZip, getSingleExportFileName } from "@/lib/export";
+import type { DownloadedAttachment } from "@/types/email";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  const session = await auth();
+
+  if (!session?.accessToken) {
+    return NextResponse.json(
+      { error: "Not authenticated" },
+      { status: 401 }
+    );
+  }
+
+  const body = (await request.json()) as {
+    messageId?: string;
+  };
+
+  if (!body.messageId) {
+    return NextResponse.json(
+      { error: "messageId is required" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const email = await getEmailDetails(session.accessToken, body.messageId);
+
+    const attachments: DownloadedAttachment[] = await Promise.all(
+      email.attachments.map(async (attachment) => {
+        const data = await getAttachment(
+          session.accessToken as string,
+          email.id,
+          attachment.attachmentId
+        );
+
+        return {
+          ...attachment,
+          data,
+        };
+      })
+    );
+
+    const zip = await buildSingleEmailZip(email, attachments);
+    const fileName = getSingleExportFileName(email);
+
+    return new Response(zip, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
+          fileName
+        )}`,
+        "Content-Length": String(zip.length),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to export email";
+
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
+  }
+}
+
+================================================================================
+7. API ROUTES - app/api/emails/[messageId]/route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { getEmailDetails } from "@/lib/gmail";
+
+export const runtime = "nodejs";
+
+type RouteContext = {
+  params: Promise<{
+    messageId: string;
+  }>;
+};
+
+export async function GET(_request: Request, context: RouteContext) {
+  const session = await auth();
+
+  if (!session?.accessToken) {
+    return NextResponse.json(
+      { error: "Not authenticated" },
+      { status: 401 }
+    );
+  }
+
+  const { messageId } = await context.params;
+
+  try {
+    const email = await getEmailDetails(session.accessToken, messageId);
+
+    return NextResponse.json(email);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load email";
+
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
+  }
+}
+
+================================================================================
+8. API ROUTES - app/api/emails/[messageId]/attachments/[attachmentId]/route.ts
+================================================================================
+import { auth } from "@/lib/auth";
+import { getAttachment } from "@/lib/gmail";
+
+export const runtime = "nodejs";
+
+type RouteContext = {
+  params: Promise<{
+    messageId: string;
+    attachmentId: string;
+  }>;
+};
+
+export async function GET(request: Request, context: RouteContext) {
+  const session = await auth();
+
+  if (!session?.accessToken) {
+    return Response.json(
+      { error: "Not authenticated" },
+      { status: 401 }
+    );
+  }
+
+  const { messageId, attachmentId } = await context.params;
+  const url = new URL(request.url);
+
+  const filename = url.searchParams.get("filename") || "attachment";
+  const mimeType =
+    url.searchParams.get("mimeType") || "application/octet-stream";
+
+  try {
+    const data = await getAttachment(
+      session.accessToken,
+      messageId,
+      attachmentId
+    );
+
+    return new Response(data, {
+      headers: {
+        "Content-Type": mimeType,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
+          filename
+        )}`,
+        "Content-Length": String(data.length),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to download attachment";
+
+    return Response.json(
+      { error: message },
+      { status: 500 }
+    );
+  }
+}
+
+================================================================================
+END OF IMPLEMENTATIONS REFERENCE
+================================================================================

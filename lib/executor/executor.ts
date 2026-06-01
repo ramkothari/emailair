@@ -5,9 +5,9 @@ import {
   DEFAULT_RETRY_BACKOFF_MS,
   retry,
 } from "./retry";
+import { executorHandlers } from "./handlers";
 import type {
   ActionType,
-  BatchActionHandler,
   BatchExecutionResult,
   ExecuteActionInput,
   ExecuteActionOptions,
@@ -16,22 +16,6 @@ import type {
 } from "./types";
 
 const SUPPORTED_ACTIONS: ActionType[] = ["delete", "archive", "download"];
-
-const mockActionHandler: BatchActionHandler = async (
-  _action,
-  emailIds
-): Promise<BatchExecutionResult> => {
-  return {
-    succeededIds: [...emailIds],
-    failedIds: [],
-  };
-};
-
-const mockHandlers: Record<ActionType, BatchActionHandler> = {
-  delete: mockActionHandler,
-  archive: mockActionHandler,
-  download: mockActionHandler,
-};
 
 function isSupportedAction(action: string): action is ActionType {
   return SUPPORTED_ACTIONS.includes(action as ActionType);
@@ -105,7 +89,7 @@ export async function executeAction(
   const batches = createBatches(emailIds, batchSize);
   const totalBatches = batches.length;
 
-  const handler = mockHandlers[input.action];
+  const handler = executorHandlers[input.action];
 
   let processedEmails = 0;
   let succeeded = 0;
@@ -132,7 +116,12 @@ export async function executeAction(
 
     try {
       const batchResult = await retry(
-        () => handler(input.action, batch),
+        () =>
+          handler({
+            action: input.action,
+            emailIds: batch,
+            context: input.context,
+          }),
         {
           attempts: retryAttempts,
           backoffMs: retryBackoffMs,

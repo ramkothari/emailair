@@ -1,8 +1,13 @@
 export type ActionType = "delete" | "archive" | "download";
 
+export type ExecuteActionContext = {
+  accessToken?: string;
+};
+
 export type ExecuteActionInput = {
   action: ActionType;
   emailIds: string[];
+  context?: ExecuteActionContext;
 };
 
 export type ExecuteActionResult = {
@@ -19,9 +24,14 @@ export type BatchExecutionResult = {
   failedIds: string[];
 };
 
+export type BatchActionInput = {
+  action: ActionType;
+  emailIds: string[];
+  context?: ExecuteActionContext;
+};
+
 export type BatchActionHandler = (
-  action: ActionType,
-  emailIds: string[]
+  input: BatchActionInput
 ) => Promise<BatchExecutionResult>;
 
 export type ExecutorProgress = {
