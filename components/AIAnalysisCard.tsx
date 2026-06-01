@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AIEmailBreakdown } from "@/components/AIEmailBreakdown";
 import { AIRiskBadge } from "@/components/AIRiskBadge";
 import { AIWarningsList } from "@/components/AIWarningsList";
+import type { EmailMetadata } from "@/lib/ai";
 import type {
   AnalysisResult,
-  EmailMetadata,
   RiskResult,
   SummaryResult,
 } from "@/lib/ai";
 
-type AnalyzeSearchResponse = {
+export type AnalyzeSearchResponse = {
   analysis: AnalysisResult;
   risk: RiskResult;
   summary: SummaryResult;
@@ -23,6 +23,7 @@ type AnalyzeSearchResponse = {
 
 type AIAnalysisCardProps = {
   emails: EmailMetadata[];
+  onAnalysisComplete?: (result: AnalyzeSearchResponse) => void;
 };
 
 function formatTimeAgo(isoString: string): string {
@@ -64,10 +65,21 @@ function AIAnalysisSkeleton() {
   );
 }
 
-export function AIAnalysisCard({ emails }: AIAnalysisCardProps) {
+export function AIAnalysisCard({
+  emails,
+  onAnalysisComplete,
+}: AIAnalysisCardProps) {
   const [result, setResult] = useState<AnalyzeSearchResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const analysisSignature = useMemo(() => {
+    return emails
+      .map((email) =>
+        [email.sender, email.subject, email.snippet ?? "", email.date].join("::")
+      )
+      .join("||");
+  }, [emails]);
 
   async function analyzeResults() {
     setIsAnalyzing(true);
@@ -97,7 +109,9 @@ export function AIAnalysisCard({ emails }: AIAnalysisCardProps) {
         throw new Error(errorMsg);
       }
 
-      setResult(data as AnalyzeSearchResponse);
+      const typedResult = data as AnalyzeSearchResponse;
+      setResult(typedResult);
+      onAnalysisComplete?.(typedResult);
     } catch (analysisError) {
       console.error("Analyze results failed:", analysisError);
       setError("Unable to analyze results. Please try again.");
@@ -105,6 +119,15 @@ export function AIAnalysisCard({ emails }: AIAnalysisCardProps) {
       setIsAnalyzing(false);
     }
   }
+
+  useEffect(() => {
+    if (analysisSignature.length === 0) return;
+
+    // Auto-trigger analysis when the provided email metadata changes.
+    // This reuses the component's existing analyzeResults() function and state.
+    analyzeResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisSignature]);
 
   if (emails.length === 0) {
     return null;
@@ -120,14 +143,17 @@ export function AIAnalysisCard({ emails }: AIAnalysisCardProps) {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={analyzeResults}
-          disabled={isAnalyzing}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isAnalyzing ? "Analyzing..." : "Analyze Results"}
-        </button>
+        {/* Show refresh button only after an analysis result exists. Initial analysis is auto-triggered. */}
+        {result ? (
+          <button
+            type="button"
+            onClick={analyzeResults}
+            disabled={isAnalyzing}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isAnalyzing ? "Analyzing..." : "Refresh Analysis"}
+          </button>
+        ) : null}
       </div>
 
       {isAnalyzing ? (
@@ -139,6 +165,15 @@ export function AIAnalysisCard({ emails }: AIAnalysisCardProps) {
       {error ? (
         <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm font-medium text-red-700">{error}</p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={analyzeResults}
+              className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Retry Analysis
+            </button>
+          </div>
         </div>
       ) : null}
 

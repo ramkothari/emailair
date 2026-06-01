@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Email } from "@/types/email";
 import type { EmailMetadata } from "@/lib/ai";
+import type { AnalyzeSearchResponse } from "@/components/AIAnalysisCard";
 import { EmailViewer } from "@/components/EmailViewer";
 import { ExportSelectedButton } from "@/components/ExportSelectedButton";
 import { AIAnalysisCard } from "@/components/AIAnalysisCard";
+import { AIActionCard } from "@/components/AIActionCard";
+const AI_ANALYSIS_EMAIL_LIMIT = 100;
 
 export type FilterPreviewEmail = Email & {
   id: string;
@@ -42,6 +45,7 @@ export function FilterPreview({
     count: number;
   } | null>(null);
   const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalyzeSearchResponse | null>(null);
 
   const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
 
@@ -290,7 +294,21 @@ export function FilterPreview({
         </div>
       ) : null}
 
-      <AIAnalysisCard emails={emailMetadata} />
+      <AIAnalysisCard
+        emails={emailMetadata.slice(0, AI_ANALYSIS_EMAIL_LIMIT)}
+        onAnalysisComplete={setAnalysisResult}
+      />
+
+      {analysisResult ? (
+        <AIActionCard
+          analysis={analysisResult.analysis}
+          risk={analysisResult.risk}
+          summary={analysisResult.summary}
+          totalEmailsFound={totalMatches}
+          emailsAnalyzed={analysisResult.analyzedCount}
+          analyzedAt={analysisResult.analyzedAt}
+        />
+      ) : null}
 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">

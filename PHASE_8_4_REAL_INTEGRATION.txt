@@ -1,0 +1,143 @@
+PHASE 8.4 — REAL INTEGRATION ANALYSIS
+
+Using the actual source files you provided, here are the findings and a concrete, non-code implementation plan that answers your questions 1–6.
+
+1) Trace the complete Run Task flow (actual code call chain)
+
+- `TaskCard` (components/TaskCard.tsx): renders a Run button and calls `onRun(task.id)` when Run is clicked.
+- `SaveTaskButton` (components/SaveTaskButton.tsx): maps `onRun` to its local `handleRunTask(task)` and passes `onRun` to each `TaskCard`.
+  - `handleRunTask(task)` sets `selectedTask` state and opens `runModalOpen = true` (so it controls the Run modal).
+- `RunTaskModal` (components/RunTaskModal.tsx): receives `open`, `task`, `onClose`, `onExecute` props from `SaveTaskButton`.
+  - When the user clicks Confirm in `RunTaskModal`, `handleConfirm()` calls `await onExecute(task.action)` and then `onClose()`.
+- `SaveTaskButton.handleExecuteTask(action)` (components/SaveTaskButton.tsx): called by `RunTaskModal`'s `onExecute` prop. This runs:
+  - `if (!selectedTask || !onRunTask) throw` — guard
+  - `await onRunTask(selectedTask)` — this is the external entrypoint where the app integrating `SaveTaskButton` must provide `onRunTask`.
+
+Summary: current runtime path for "Run" stops at `onRunTask(selectedTask)` provided to `SaveTaskButton`. The app-level integration must supply `onRunTask` to continue the flow.
+
+2) Where `TaskPreviewCard` should be rendered
+
+- `TaskPreviewCard` is the preview + confirmation + execution UI (components/TaskPreviewCard.tsx). It expects:
+  - `taskName`, `action`, `emails`, `analysis`, `hasGoogleSession`, `onCancel`, `onExecuteAction`, `onExecutionSuccess`.
+
+- The correct place to render `TaskPreviewCard` is inside the `RunTaskModal` (components/RunTaskModal.tsx) in place of (or above) the current static placeholder area that says "[Results will appear after search]" and "AI Analysis: Results will be analyzed before you confirm the final action." In other words, `RunTaskModal` should:
+  - Acquire the preview result (runTaskPreview) for the `task`,
+  - Render `TaskPreviewCard` populated with that preview result, and
+  - Wire `TaskPreviewCard.onExecuteAction` to the existing production handlers (archive/delete/download) via `onRunTask` or a small adapter.
+
+Why RunTaskModal: it already owns `task`, open/close lifecycle, and the existing confirm button. Replacing the single confirm flow with the preview-confirm-execute flow is minimal and matches UX: open modal → preview analysis → confirm → execute.
+
+3) What data is missing to call `runTaskPreview()`
+
+`runTaskPreview<TSearch>(task: TaskPreviewDefinition<TSearch>, executeSearch)` requires:
+- `TaskPreviewDefinition<TSearch>` with fields: `id`, `title`, `action`, `search` (TSearch), `searchLabel?`, `maxResults?`.
+- An `executeSearch` implementation: `(task) => Promise<TaskPreviewEmail[]>` which can run the search described by `task.search` and return an array of `TaskPreviewEmail` objects.
+
+From the current `Task` shape (lib/tasks/task-types.ts) we only have:
+- `id`, `name`, `query` (string), `action`, timestamps.
+
+Missing pieces:
+- A `search` payload (TSearch) inside the task. `task.query` is a freeform string — not typed `EmailFilter`.
+- An `executeSearch` function that knows how to interpret `task.query` (or `task.search`) and call the Gmail preview/search handlers (server actions like `previewFilterAction` or `searchEmails`) to return `TaskPreviewEmail[]`.
+
+So the missing data is structured search criteria (EmailFilter) or an agreed parsing strategy to convert `query` → `EmailFilter` at runtime.
+
+4) Is `Task.query` sufficient?
+
+- Short answer: Not reliably.
+
+- Why: `Task.query` is an opaque saved string (e.g., "amazon"). `runTaskPreview()` expects a `TaskPreviewDefinition.search` that the `executeSearch` can use to call `searchEmails` or an appropriate search API. The codebase implements `searchEmails(accessToken, filter: EmailFilter, limit)` and `previewFilterAction(filter)` which both expect an `EmailFilter` shape (sender, subject, hasAttachment, olderThanDays), not a generic freeform string.
+
+- Possible but fragile: If you implement an `executeSearch` that treats `task.query` as a Gmail query string (raw q= value) and you build a search function that uses the Gmail API directly with that raw query, then `Task.query` could be used as-is. However: current `lib/gmail.searchEmails` expects `EmailFilter` and internal app logic (FilterBuilder, previewFilterAction) uses `EmailFilter` objects, not raw query strings. There is no canonical parser in-code that converts `query` → `EmailFilter`.
+
+Therefore relying only on `Task.query` is a brittle shortcut; robust integration requires storing structured search criteria.
+
+5) Should tasks store: `EmailFilter`, `Query String`, or Both?
+
+Recommendation: store both (backwards-compatible) — i.e., keep `query` (string) for human readability and legacy tasks, and add a new `search` property with the structured `EmailFilter` shape.
+
+Rationale:
+- Backwards compatibility: Existing tasks already have `query`. Keep it to avoid invalidating saved tasks.
+- Robust execution: Structured `EmailFilter` (sender, subject, olderThanDays, hasAttachment) maps directly to `lib/gmail.searchEmails` and `app/actions/filter-actions.ts`, making preview and execution deterministic and type-safe.
+- Flexibility: If the user saved a freeform query via UI (or older task), an adapter can attempt to interpret `query` at runtime (best-effort) and fall back to a raw Gmail q= search if `search` is absent.
+
+Thus: migrate to `Task { id,name,query,action,search? }` where `search?: EmailFilter` is optional but preferred for execution.
+
+6) Concrete implementation plan (no code; step-by-step actions)
+
+Goal: wire saved tasks into the preview → confirm → execute flow using existing components and server actions, without adding new Gmail mutation logic in client components.
+
+High-level plan (ordered):
+
+A. Data model decision (short task migration)
+  1. Make tasks optionally hold structured `search: EmailFilter` (server/DB not required — browser storage is used). For now, client-side only: when creating a task in `CreateTaskModal` capture both `query` and the `EmailFilter` used to produce the query (the FilterBuilder already builds `EmailFilter` when the user previews).
+  2. If `CreateTaskModal` can't capture `EmailFilter` (e.g., older saved tasks), leave `search` undefined and rely on `query` fallback.
+
+B. Execution entrypoint wiring
+  1. The current `SaveTaskButton` already exposes `onRunTask?: (task) => Promise<void>`; ensure the parent that renders `SaveTaskButton` (likely the page that has `FilterBuilder` or Dashboard) passes an `onRunTask` implementation.
+  2. Implement `onRunTask` at the page level to do the preview+execution flow using the following steps (described below). This keeps `SaveTaskButton` unchanged.
+
+C. Preview step (where `TaskPreviewCard` comes in)
+  1. When `SaveTaskButton` opens `RunTaskModal`, the page-level `onRunTask` must open a preview flow instead of performing an immediate execution. Two options:
+    - Option 1 (simpler): Keep `SaveTaskButton` as is. Provide an `onRunTask` that, when invoked, opens a dedicated `TaskPreview` modal (or uses `RunTaskModal` as the host) and performs the preview. Practically, the easiest modification is to change `RunTaskModal` content to render `TaskPreviewCard` (see D).
+    - Option 2: Do not change `RunTaskModal` internals; instead, implement `onRunTask` so that it: (a) calls a server preview action (see D.1), (b) shows a new UI (e.g., a page-level `TaskPreviewCard`) and then executes when confirmed. (This requires a new parent modal and more changes.)
+
+  2. I recommend Option 1: update `RunTaskModal` to perform preview and render `TaskPreviewCard` inside it (so `RunTaskModal` becomes the host for preview + confirm + execute). This is the smallest UI-surface change and aligns with previously noted UX.
+
+D. How to call `runTaskPreview()` from `RunTaskModal`
+  1. Build a `TaskPreviewDefinition` from `Task`:
+     - `id` = task.id
+     - `title` = task.name
+     - `action` = task.action
+     - `search` = task.search (preferred) OR parsed `task.query` → `EmailFilter` (fallback)
+     - `searchLabel` = task.query (human-friendly)
+     - `maxResults` = optional (use 50 as default)
+  2. Provide an `executeSearch` function to `runTaskPreview`:
+     - Implementation should call existing server action `previewFilterAction(filter)` if you have an `EmailFilter`.
+     - If you only have a raw `task.query`, implement executeSearch that uses a server API that accepts a raw Gmail query or construct an `EmailFilter` where `subject` or `sender` contain the string (best-effort); prefer adding `search` when creating tasks to avoid this.
+  3. Call `runTaskPreview(taskPreviewDefinition, executeSearch)` (client-side) to obtain a `TaskRunResult`.
+
+E. Render `TaskPreviewCard` and wire execution adapters
+  1. Pass `TaskRunResult` data into `TaskPreviewCard`:
+     - `taskName` = result.title
+     - `action` = result.action
+     - `emails` = result.emails (TaskPreviewEmail[])
+     - `analysis` = { summary: result.summary.summary, riskLevel: derived from result.risk, warnings: from result.analysis or risk, analyzedCount: result.analyzedCount }
+  2. Provide `onExecuteAction` callback for `TaskPreviewCard` that maps to existing server-side handlers:
+     - For `delete` or `archive` actions: call the server action wrappers `deleteFilterAction(filter, ids)` or `archiveFilterAction(filter, ids)` (app/actions/filter-actions.ts) when you have `EmailFilter` stored in `task.search`.
+     - If working from `task.query` raw string, either:
+       a) call a new server endpoint that accepts a raw query and list of ids (server should reuse `lib/gmail` helpers), or
+       b) call `deleteSelectedEmails` / `archiveSelectedEmails` server actions if working in Dashboard context and you can supply ids directly.
+     - For `download` action: call the existing `POST /api/export/selected` endpoint with `messageIds` (app/api/export/selected/route.ts)
+  3. `onExecuteAction` must return the shape `Promise<{ success: boolean, message?: string } | void>`; ensure server action responses are adapted to that shape.
+
+F. Execution result handling
+  1. `TaskPreviewCard` already writes a local execution log and displays `TaskExecutionResult`. The component will show success/error and offers retry. Use that existing behavior—no change required.
+  2. After successful execution, `TaskPreviewCard` calls `onExecutionSuccess`—implement this to refresh the UI (e.g., re-run the visible preview, `router.refresh()`, or re-trigger the parent search state).
+
+G. Edge cases and safety
+  1. Session missing: `TaskPreviewCard` already handles `hasGoogleSession` and shows a friendly error—ensure the page-level integration propagates real session state.
+  2. Large executions: `TaskConfirmationDialog` warns for >500 items—keep that behavior.
+  3. Duplicate clicks: `TaskPreviewCard` uses `executionInProgressRef` to prevent duplicates—keep same.
+
+Concrete minimal changes required (developer tasks list, no code):
+
+1. Add optional `search?: EmailFilter` to saved `Task` schema (lib/tasks/task-types.ts) and update `CreateTaskModal` to capture it when available (e.g., when the user saves while a `FilterBuilder` filter is active). Keep `query` as a human label.
+2. Implement a page-level `onRunTask` integration where `SaveTaskButton` is used (the host page) that:
+   - opens `RunTaskModal` (existing behavior),
+   - passes `onExecute` that triggers preview+preview-render flow in `RunTaskModal` (see #3). (Alternatively implement preview inside `RunTaskModal` directly.)
+3. Update `RunTaskModal` to: on mount (or when user clicks Confirm), call `runTaskPreview()` with a `TaskPreviewDefinition` created from `task` and an `executeSearch` adapter that calls `previewFilterAction` when `search` exists, or a fallback that interprets `task.query`.
+   - After obtaining `TaskRunResult`, replace the placeholder area with a `TaskPreviewCard` using the result data and wiring `onExecuteAction` to call the server-side mutation actions (archive/delete/download) described in section E.2.
+4. Ensure `onExecuteAction` calls only existing production handlers:
+   - Use `archiveFilterAction(filter, ids)` and `deleteFilterAction(filter, ids)` (app/actions/filter-actions.ts) when `search` is available.
+   - Use `POST /api/export/selected` for downloads (app/api/export/selected/route.ts).
+   - Adapt responses to the `TaskExecuteHandlerResult` shape expected by `TaskPreviewCard`.
+5. Implement `onExecutionSuccess` to refresh current preview results (call the same `executeSearch` again or call parent `onRefreshPreview`) and close modal or update UI as appropriate.
+6. Optional: Add a small `query -> EmailFilter` parser for older tasks missing `search` to increase compatibility; prefer asking the user to re-save tasks with the structured filter during a migration UI.
+
+Final note (safety & constraints):
+- Do NOT add any direct Gmail mutation logic inside client components. Use the existing server actions (`app/actions/filter-actions.ts`) and API endpoints (`app/api/export/selected/route.ts`).
+- `runTaskPreview` must not call mutation functions — it is preview-only (already enforced in lib/task-preview.ts).
+- The minimal, safest path is: store `EmailFilter` on tasks when saving, call `runTaskPreview()` from `RunTaskModal` via an `executeSearch` adapter that calls `previewFilterAction`, then render `TaskPreviewCard` inside `RunTaskModal` and wire `onExecuteAction` to `archiveFilterAction` / `deleteFilterAction` / the export endpoint.
+
+If you want, I can now produce a step-by-step developer task checklist (with exact files and function names to edit) implementing the plan above (still not writing code until you approve).

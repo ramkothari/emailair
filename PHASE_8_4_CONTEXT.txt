@@ -1,0 +1,2085 @@
+--- FILE: components/FilterBuilder.tsx ---
+
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import type { Email } from "@/types/email";
+import type { EmailFilter } from "@/types/filter";
+import { FilterPreview } from "@/components/FilterPreview";
+
+type PreviewData = {
+  totalMatches: number;
+  emails: Email[];
+};
+
+type FilterActionResult =
+  | {
+      ok: true;
+      data: PreviewData;
+      message?: string;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+type FilterBuilderProps = {
+  onPreview: (filter: EmailFilter) => Promise<FilterActionResult>;
+  onArchive: (
+    filter: EmailFilter,
+    emailIds: string[]
+  ) => Promise<FilterActionResult>;
+  onDelete: (
+    filter: EmailFilter,
+    emailIds: string[]
+  ) => Promise<FilterActionResult>;
+};
+
+export function FilterBuilder({
+  onPreview,
+  onArchive,
+  onDelete,
+}: FilterBuilderProps) {
+  const router = useRouter();
+
+  const [sender, setSender] = useState("");
+  const [subject, setSubject] = useState("");
+  const [olderThanDays, setOlderThanDays] = useState("");
+  const [hasAttachment, setHasAttachment] = useState(false);
+
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [previewFilter, setPreviewFilter] = useState<EmailFilter | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const [isPending, startTransition] = useTransition();
+
+  function resetPreviewState() {
+    setPreview(null);
+    setPreviewFilter(null);
+    setError(null);
+    setMessage(null);
+  }
+
+  function buildFilterFromForm(): EmailFilter | null {
+    const filter: EmailFilter = {};
+
+    const trimmedSender = sender.trim();
+    const trimmedSubject = subject.trim();
+    const trimmedOlderThanDays = olderThanDays.trim();
+
+    if (trimmedSender) {
+      filter.sender = trimmedSender;
+    }
+
+    if (trimmedSubject) {
+      filter.subject = trimmedSubject;
+    }
+
+    if (trimmedOlderThanDays) {
+      const parsedDays = Number(trimmedOlderThanDays);
+
+      if (
+        !Number.isFinite(parsedDays) ||
+        !Number.isInteger(parsedDays) ||
+        parsedDays <= 0
+      ) {
+        setError("Older Than Days must be a positive whole number.");
+        return null;
+      }
+
+      filter.olderThanDays = parsedDays;
+    }
+
+    if (hasAttachment) {
+      filter.hasAttachment = true;
+    }
+
+    const hasAnyFilter =
+      Boolean(filter.sender) ||
+      Boolean(filter.subject) ||
+      Boolean(filter.olderThanDays) ||
+      Boolean(filter.hasAttachment);
+
+    if (!hasAnyFilter) {
+      setError("Add at least one filter before previewing.");
+      return null;
+    }
+
+    return filter;
+  }
+
+  function handlePreview() {
+    setError(null);
+    setMessage(null);
+
+    const filter = buildFilterFromForm();
+
+    if (!filter) {
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await onPreview(filter);
+
+      if (!result.ok) {
+        setPreview(null);
+        setPreviewFilter(null);
+        setError(result.error);
+        return;
+      }
+
+      setPreview(result.data);
+      setPreviewFilter(filter);
+      setMessage(result.message ?? null);
+    });
+  }
+
+  async function handleArchiveSelected(selectedIds: string[]) {
+    if (!previewFilter) {
+      throw new Error("No filter set.");
+    }
+
+    const result = await onArchive(previewFilter, selectedIds);
+
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    router.refresh();
+  }
+
+  async function handleDeleteSelected(selectedIds: string[]) {
+    if (!previewFilter) {
+      throw new Error("No filter set.");
+    }
+
+    const result = await onDelete(previewFilter, selectedIds);
+
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    router.refresh();
+  }
+
+  async function handleRefreshPreview() {
+    if (!previewFilter) {
+      return;
+    }
+
+    const result = await onPreview(previewFilter);
+
+    if (!result.ok) {
+      setPreview(null);
+      setError(result.error);
+      return;
+    }
+
+    setPreview(result.data);
+  }
+
+  function handleClear() {
+    setSender("");
+    setSubject("");
+    setOlderThanDays("");
+    setHasAttachment(false);
+    resetPreviewState();
+  }
+
+  return (
+    <section className="rounded-lg border bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Filter Builder</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Search Gmail using simple filters, preview matches, then manually
+          archive or delete previewed emails.
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div>
+          <label
+            htmlFor="sender"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Sender (Email or Name)
+          </label>
+          <input
+            id="sender"
+            type="text"
+            value={sender}
+            onChange={(event) => {
+              setSender(event.target.value);
+              resetPreviewState();
+            }}
+            placeholder="linkedin, amazon.com, john@example.com"
+            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Gmail will search sender addresses and display names
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="subject"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Subject Contains
+          </label>
+          <input
+            id="subject"
+            type="text"
+            value={subject}
+            onChange={(event) => {
+              setSubject(event.target.value);
+              resetPreviewState();
+            }}
+            placeholder="invoice, receipt, password"
+            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="olderThanDays"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Older Than Days
+          </label>
+          <input
+            id="olderThanDays"
+            type="number"
+            min="1"
+            step="1"
+            value={olderThanDays}
+            onChange={(event) => {
+              setOlderThanDays(event.target.value);
+              resetPreviewState();
+            }}
+            placeholder="30"
+            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={hasAttachment}
+              onChange={(event) => {
+                setHasAttachment(event.target.checked);
+                resetPreviewState();
+              }}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Has Attachment
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={isPending}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isPending ? "Working..." : "Preview"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleClear}
+          disabled={isPending}
+          className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Clear
+        </button>
+      </div>
+
+      {error ? (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      {message ? (
+        <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {message}
+        </div>
+      ) : null}
+
+      {preview ? (
+        <FilterPreview
+          totalMatches={preview.totalMatches}
+          emails={preview.emails}
+          isLoading={isPending}
+          error={error}
+          onArchiveSelected={handleArchiveSelected}
+          onDeleteSelected={handleDeleteSelected}
+          onRefreshPreview={handleRefreshPreview}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+
+--- FILE: components/FilterPreview.tsx ---
+
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { Email } from "@/types/email";
+import type { EmailMetadata } from "@/lib/ai";
+import { EmailViewer } from "@/components/EmailViewer";
+import { ExportSelectedButton } from "@/components/ExportSelectedButton";
+import { AIAnalysisCard } from "@/components/AIAnalysisCard";
+
+export type FilterPreviewEmail = Email & {
+  id: string;
+  sender: string;
+  subject: string;
+  date: string;
+  snippet?: string;
+};
+
+type FilterPreviewProps = {
+  totalMatches: number;
+  emails: Email[];
+  isLoading?: boolean;
+  error?: string | null;
+  onArchiveSelected: (ids: string[]) => Promise<void>;
+  onDeleteSelected: (ids: string[]) => Promise<void>;
+  onRefreshPreview: () => Promise<void>;
+};
+
+export function FilterPreview({
+  totalMatches,
+  emails,
+  isLoading = false,
+  error = null,
+  onArchiveSelected,
+  onDeleteSelected,
+  onRefreshPreview,
+}: FilterPreviewProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteConfirmData, setDeleteConfirmData] = useState<{
+    count: number;
+  } | null>(null);
+  const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
+
+  const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
+
+  const selectedCount = selectedIds.size;
+  const hasEmails = emails.length > 0;
+  const allSelected = hasEmails && selectedCount === emails.length;
+
+  const emailMetadata: EmailMetadata[] = useMemo(
+    () =>
+      emails.map((email) => ({
+        sender: email.sender || "Unknown sender",
+        subject: email.subject || "(No subject)",
+        snippet: email.snippet || "",
+        date: email.date || "Unknown date",
+      })),
+    [emails]
+  );
+
+  useEffect(() => {
+    setSelectedIds((currentSelectedIds) => {
+      const validIds = new Set(emailIds);
+      const nextSelectedIds = new Set<string>();
+
+      currentSelectedIds.forEach((id) => {
+        if (validIds.has(id)) {
+          nextSelectedIds.add(id);
+        }
+      });
+
+      return nextSelectedIds;
+    });
+  }, [emailIds]);
+
+  function toggleEmailSelection(emailId: string) {
+    setActionError(null);
+    setActionMessage(null);
+
+    setSelectedIds((currentSelectedIds) => {
+      const nextSelectedIds = new Set(currentSelectedIds);
+
+      if (nextSelectedIds.has(emailId)) {
+        nextSelectedIds.delete(emailId);
+      } else {
+        nextSelectedIds.add(emailId);
+      }
+
+      return nextSelectedIds;
+    });
+  }
+
+  function selectAllEmails() {
+    setActionError(null);
+    setActionMessage(null);
+    setSelectedIds(new Set(emailIds));
+  }
+
+  function clearSelection() {
+    setActionError(null);
+    setActionMessage(null);
+    setSelectedIds(new Set());
+  }
+
+  async function handleArchiveSelected() {
+    await runSelectedAction("archive");
+  }
+
+  async function handleDeleteSelected() {
+    if (selectedIds.size === 0) {
+      setActionError("Select at least one email.");
+      return;
+    }
+
+    setDeleteConfirmData({ count: selectedIds.size });
+  }
+
+  async function confirmDelete() {
+    setDeleteConfirmData(null);
+    await runSelectedAction("delete");
+  }
+
+  function cancelDelete() {
+    setDeleteConfirmData(null);
+  }
+
+  async function runSelectedAction(action: "archive" | "delete") {
+    setActionError(null);
+    setActionMessage(null);
+
+    if (selectedIds.size === 0) {
+      setActionError("Select at least one email.");
+      return;
+    }
+
+    const ids = Array.from(selectedIds);
+
+    try {
+      setIsSubmitting(true);
+
+      if (action === "archive") {
+        await onArchiveSelected(ids);
+        setActionMessage(
+          ids.length === 1
+            ? "Archived 1 selected email."
+            : `Archived ${ids.length} selected emails.`
+        );
+      } else {
+        await onDeleteSelected(ids);
+        setActionMessage(
+          ids.length === 1
+            ? "Moved 1 selected email to Trash."
+            : `Moved ${ids.length} selected emails to Trash.`
+        );
+      }
+
+      setSelectedIds(new Set());
+      await onRefreshPreview();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : action === "archive"
+            ? "Failed to archive selected emails."
+            : "Failed to delete selected emails.";
+
+      setActionError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border bg-white p-6">
+        <p className="text-sm text-gray-600">Loading preview results...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-6">
+        <p className="text-sm font-medium text-red-700">Failed to load preview.</p>
+        <p className="mt-1 text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (!hasEmails) {
+    return (
+      <div className="rounded-lg border bg-white p-6">
+        <p className="text-sm text-gray-600">No matching emails found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-white">
+      <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-900">
+            Found {emails.length} {emails.length === 1 ? "email" : "emails"}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Selected:{" "}
+            <span className="font-semibold">
+              {selectedCount} of {emails.length} previewed
+            </span>
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={selectAllEmails}
+            disabled={isSubmitting || allSelected}
+            className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Select All
+          </button>
+
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={isSubmitting || selectedCount === 0}
+            className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Clear Selection
+          </button>
+
+          <button
+            type="button"
+            onClick={handleArchiveSelected}
+            disabled={isSubmitting || selectedCount === 0}
+            className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? "Archiving..." : "Archive Selected"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            disabled={isSubmitting || selectedCount === 0}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? "Deleting..." : "Delete Selected"}
+          </button>
+
+          <ExportSelectedButton selectedMessageIds={Array.from(selectedIds)} />
+        </div>
+      </div>
+
+      {actionError ? (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-700">{actionError}</p>
+        </div>
+      ) : null}
+
+      {actionMessage ? (
+        <div className="border-b border-green-200 bg-green-50 px-4 py-3">
+          <p className="text-sm font-medium text-green-700">{actionMessage}</p>
+        </div>
+      ) : null}
+
+      {deleteConfirmData ? (
+        <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-3">
+          <p className="text-sm font-medium text-yellow-800">
+            Move {deleteConfirmData.count}{" "}
+            {deleteConfirmData.count === 1 ? "email" : "emails"} to Trash?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={confirmDelete}
+              className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={cancelDelete}
+              className="rounded-md border px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <AIAnalysisCard emails={emailMetadata} />
+
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b bg-gray-50">
+              <th className="w-12 px-4 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() => {
+                    if (allSelected) {
+                      clearSelection();
+                    } else {
+                      selectAllEmails();
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  aria-label="Select all preview emails"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                Sender
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                Subject
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                Date
+              </th>
+              <th className="w-20 px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                Action
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {emails.map((email) => {
+              const isSelected = selectedIds.has(email.id);
+
+              return (
+                <tr
+                  key={email.id}
+                  className={`border-b transition-colors ${
+                    isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleEmailSelection(email.id)}
+                      disabled={isSubmitting}
+                      aria-label={`Select email from ${email.sender}`}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </td>
+
+                  <td className="max-w-xs px-4 py-3 text-sm text-gray-900">
+                    <div className="truncate" title={email.sender}>
+                      {email.sender || "Unknown sender"}
+                    </div>
+                  </td>
+
+                  <td className="max-w-md px-4 py-3 text-sm text-gray-900">
+                    <div className="truncate" title={email.subject}>
+                      {email.subject || "(No subject)"}
+                    </div>
+                    {email.snippet ? (
+                      <div className="mt-1 truncate text-xs text-gray-500">
+                        {email.snippet}
+                      </div>
+                    ) : null}
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                    {email.date || "Unknown date"}
+                  </td>
+
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setViewingEmailId(email.id)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {viewingEmailId && (
+        <EmailViewer
+          messageId={viewingEmailId}
+          onClose={() => setViewingEmailId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+
+--- FILE: components/SaveTaskButton.tsx ---
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { CreateTaskModal } from "@/components/CreateTaskModal";
+import { RunTaskModal } from "@/components/RunTaskModal";
+import { TaskCard } from "@/components/TaskCard";
+import { deleteTask, getTasks } from "@/lib/tasks/task-storage";
+import type { Task, TaskAction } from "@/lib/tasks/task-types";
+
+type SaveTaskButtonProps = {
+  query: string;
+  currentAction?: TaskAction;
+  onRunTask?: (task: Task) => Promise<void>;
+};
+
+export function SaveTaskButton({
+  query,
+  currentAction = "archive",
+  onRunTask,
+}: SaveTaskButtonProps) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [runModalOpen, setRunModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTasks(getTasks());
+  }, []);
+
+  function handleTaskCreated(task: Task) {
+    setTasks((currentTasks) => [task, ...currentTasks]);
+    setStorageError(null);
+  }
+
+  function handleDeleteTask(id: string) {
+    try {
+      deleteTask(id);
+      setTasks((currentTasks) => currentTasks.filter((task) => task.id !== id));
+      setStorageError(null);
+    } catch (error) {
+      setStorageError(
+        error instanceof Error ? error.message : "Unable to delete task."
+      );
+    }
+  }
+
+  function handleRunTask(task: Task) {
+    setSelectedTask(task);
+    setRunModalOpen(true);
+  }
+
+  async function handleExecuteTask(action: TaskAction) {
+    if (!selectedTask || !onRunTask) {
+      throw new Error("Cannot execute task without run handler");
+    }
+
+    await onRunTask(selectedTask);
+  }
+
+  const hasQuery = query.trim().length > 0;
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">
+            Reusable Tasks
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Save searches and actions for quick execution later.
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            Tasks are saved in your browser. Each run requires your confirmation.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setCreateModalOpen(true)}
+          disabled={!hasQuery}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Save As Task
+        </button>
+      </div>
+
+      {!hasQuery ? (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          Run a search before saving a task.
+        </div>
+      ) : null}
+
+      {storageError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {storageError}
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        <h3 className="text-sm font-semibold text-gray-900">Saved Tasks</h3>
+
+        {tasks.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
+            No saved tasks yet.
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-3">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onRun={() => handleRunTask(task)}
+                onDelete={handleDeleteTask}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CreateTaskModal
+        open={createModalOpen}
+        query={query}
+        initialAction={currentAction}
+        onClose={() => setCreateModalOpen(false)}
+        onTaskCreated={handleTaskCreated}
+      />
+
+      <RunTaskModal
+        open={runModalOpen}
+        task={selectedTask}
+        onClose={() => {
+          setRunModalOpen(false);
+          setSelectedTask(null);
+        }}
+        onExecute={handleExecuteTask}
+      />
+    </section>
+  );
+}
+
+
+--- FILE: components/TaskCard.tsx ---
+
+"use client";
+
+import type { Task } from "@/lib/tasks/task-types";
+
+type TaskCardProps = {
+  task: Task;
+  onRun?: (id: string) => void;
+  onDelete?: (id: string) => void;
+};
+
+function formatTaskAction(action: Task["action"]): string {
+  if (action === "delete") {
+    return "Delete";
+  }
+
+  if (action === "archive") {
+    return "Archive";
+  }
+
+  return "Download";
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+export function TaskCard({ task, onRun, onDelete }: TaskCardProps) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold text-gray-900">
+            {task.name}
+          </h3>
+
+          <p className="mt-1 text-sm text-gray-600">
+            Action:{" "}
+            <span className="font-medium text-gray-900">
+              {formatTaskAction(task.action)}
+            </span>
+          </p>
+
+          <p className="mt-1 truncate text-sm text-gray-600">
+            Query:{" "}
+            <span className="font-medium text-gray-900">{task.query}</span>
+          </p>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Created: {formatDate(task.createdAt)}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          {onRun ? (
+            <button
+              type="button"
+              onClick={() => onRun(task.id)}
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Run
+            </button>
+          ) : null}
+
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={() => onDelete(task.id)}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+--- FILE: components/TaskPreviewCard.tsx ---
+
+"use client";
+
+import { useMemo, useRef, useState } from "react";
+import {
+  TaskConfirmationDialog,
+  type ConfirmableTaskAction,
+} from "@/components/TaskConfirmationDialog";
+import {
+  TaskExecutionResult,
+  type TaskExecutionResultData,
+} from "@/components/TaskExecutionResult";
+
+export type TaskPreviewEmail = {
+  id: string;
+  sender: string;
+  subject: string;
+  snippet?: string;
+  date: string;
+};
+
+export type TaskPreviewAnalysis = {
+  summary: string;
+  riskLevel: "low" | "medium" | "high" | "unknown";
+  warnings: string[];
+  analyzedCount: number;
+};
+
+export type TaskExecuteHandlerResult = {
+  success: boolean;
+  message?: string;
+};
+
+export type TaskPreviewCardProps = {
+  taskName: string;
+  action: string;
+  emails: TaskPreviewEmail[];
+  analysis: TaskPreviewAnalysis;
+  hasGoogleSession?: boolean;
+  onCancel: () => void;
+  onExecuteAction: (input: {
+    action: ConfirmableTaskAction;
+    ids: string[];
+    taskName: string;
+  }) => Promise<TaskExecuteHandlerResult | void>;
+  onExecutionSuccess?: (input: {
+    action: ConfirmableTaskAction;
+    ids: string[];
+  }) => void | Promise<void>;
+};
+
+const VALID_ACTIONS: readonly ConfirmableTaskAction[] = [
+  "delete",
+  "archive",
+  "download",
+];
+
+function isValidAction(action: string): action is ConfirmableTaskAction {
+  return VALID_ACTIONS.includes(action as ConfirmableTaskAction);
+}
+
+function getActionLabel(action: ConfirmableTaskAction): string {
+  if (action === "delete") {
+    return "Delete";
+  }
+
+  if (action === "archive") {
+    return "Archive";
+  }
+
+  return "Download";
+}
+
+function getExecutingLabel(action: ConfirmableTaskAction): string {
+  if (action === "delete") {
+    return "Deleting Emails...";
+  }
+
+  if (action === "archive") {
+    return "Archiving Emails...";
+  }
+
+  return "Preparing Download...";
+}
+
+function getRiskClass(riskLevel: TaskPreviewAnalysis["riskLevel"]): string {
+  if (riskLevel === "high") {
+    return "bg-red-50 text-red-700 ring-red-200";
+  }
+
+  if (riskLevel === "medium") {
+    return "bg-yellow-50 text-yellow-800 ring-yellow-200";
+  }
+
+  if (riskLevel === "low") {
+    return "bg-green-50 text-green-700 ring-green-200";
+  }
+
+  return "bg-gray-50 text-gray-700 ring-gray-200";
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Task execution failed.";
+}
+
+function writeLocalExecutionLog(input: {
+  taskName: string;
+  action: ConfirmableTaskAction;
+  affectedCount: number;
+  executedAt: string;
+}): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const key = "gmail-hygiene-task-execution-log";
+    const existingRaw = window.localStorage.getItem(key);
+    const existing = existingRaw
+      ? (JSON.parse(existingRaw) as unknown)
+      : [];
+
+    const logs = Array.isArray(existing) ? existing : [];
+
+    logs.unshift(input);
+
+    window.localStorage.setItem(key, JSON.stringify(logs.slice(0, 50)));
+  } catch {
+    // Optional analytics only. Never block execution result rendering.
+  }
+}
+
+export function TaskPreviewCard({
+  taskName,
+  action,
+  emails,
+  analysis,
+  hasGoogleSession = true,
+  onCancel,
+  onExecuteAction,
+  onExecutionSuccess,
+}: TaskPreviewCardProps) {
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionResult, setExecutionResult] =
+    useState<TaskExecutionResultData | null>(null);
+
+  const executionInProgressRef = useRef(false);
+
+  const emailIds = useMemo(
+    () => emails.map((email) => email.id).filter(Boolean),
+    [emails]
+  );
+
+  const validAction = isValidAction(action) ? action : null;
+
+  async function executeTask(): Promise<void> {
+    if (executionInProgressRef.current) {
+      return;
+    }
+
+    if (!validAction) {
+      setExecutionResult({
+        status: "error",
+        taskName,
+        action: "delete",
+        affectedCount: 0,
+        executionTimeMs: 0,
+        completedAt: new Date().toISOString(),
+        error: `Invalid task action: ${action}`,
+      });
+      setIsConfirmationOpen(false);
+      return;
+    }
+
+    if (!hasGoogleSession) {
+      setExecutionResult({
+        status: "error",
+        taskName,
+        action: validAction,
+        affectedCount: 0,
+        executionTimeMs: 0,
+        completedAt: new Date().toISOString(),
+        error: "Google session expired. Please sign in again.",
+      });
+      setIsConfirmationOpen(false);
+      return;
+    }
+
+    if (emailIds.length === 0) {
+      setExecutionResult({
+        status: "error",
+        taskName,
+        action: validAction,
+        affectedCount: 0,
+        executionTimeMs: 0,
+        completedAt: new Date().toISOString(),
+        error: "No matching emails are available for this task.",
+      });
+      setIsConfirmationOpen(false);
+      return;
+    }
+
+    executionInProgressRef.current = true;
+    setIsExecuting(true);
+    setExecutionResult(null);
+
+    const startedAt = performance.now();
+
+    try {
+      const handlerResult = await onExecuteAction({
+        action: validAction,
+        ids: emailIds,
+        taskName,
+      });
+
+      if (handlerResult && !handlerResult.success) {
+        throw new Error(handlerResult.message || "Existing handler failed.");
+      }
+
+      const completedAt = new Date().toISOString();
+      const executionTimeMs = performance.now() - startedAt;
+
+      writeLocalExecutionLog({
+        taskName,
+        action: validAction,
+        affectedCount: emailIds.length,
+        executedAt: completedAt,
+      });
+
+      setExecutionResult({
+        status: "success",
+        taskName,
+        action: validAction,
+        affectedCount: emailIds.length,
+        executionTimeMs,
+        completedAt,
+        message:
+          handlerResult?.message ||
+          `${getActionLabel(validAction)} completed successfully.`,
+      });
+
+      setIsConfirmationOpen(false);
+
+      await onExecutionSuccess?.({
+        action: validAction,
+        ids: emailIds,
+      });
+    } catch (error) {
+      setExecutionResult({
+        status: "error",
+        taskName,
+        action: validAction,
+        affectedCount: emailIds.length,
+        executionTimeMs: performance.now() - startedAt,
+        completedAt: new Date().toISOString(),
+        error: getErrorMessage(error),
+      });
+
+      setIsConfirmationOpen(false);
+    } finally {
+      setIsExecuting(false);
+      executionInProgressRef.current = false;
+    }
+  }
+
+  const canConfirm = Boolean(validAction) && emailIds.length > 0 && !isExecuting;
+
+  return (
+    <div className="space-y-5 rounded-xl border bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">{taskName}</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Task preview generated. No action has been executed.
+          </p>
+        </div>
+
+        {validAction ? (
+          <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
+            Action: {getActionLabel(validAction)}
+          </span>
+        ) : (
+          <span className="inline-flex rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700">
+            Invalid action
+          </span>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border bg-gray-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Matching Emails
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">
+            {emails.length}
+          </p>
+        </div>
+
+        <div className="rounded-lg border bg-gray-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Analyzed Sample
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">
+            {analysis.analyzedCount}
+          </p>
+        </div>
+
+        <div className="rounded-lg border bg-gray-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Risk Level
+          </p>
+          <span
+            className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ${getRiskClass(
+              analysis.riskLevel
+            )}`}
+          >
+            {analysis.riskLevel}
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-gray-50 p-4">
+        <h3 className="text-sm font-semibold text-gray-900">AI Summary</h3>
+        <p className="mt-2 text-sm leading-6 text-gray-700">
+          {analysis.summary}
+        </p>
+      </div>
+
+      <div className="rounded-lg border bg-gray-50 p-4">
+        <h3 className="text-sm font-semibold text-gray-900">Warnings</h3>
+
+        {analysis.warnings.length === 0 ? (
+          <p className="mt-2 text-sm text-gray-600">No warnings detected.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {analysis.warnings.map((warning, index) => (
+              <li
+                key={`${warning}-${index}`}
+                className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
+              >
+                {warning}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+        <h3 className="text-sm font-semibold text-yellow-900">
+          Impact Summary
+        </h3>
+        <p className="mt-2 text-sm text-yellow-800">
+          {validAction ? (
+            <>
+              Confirming this task will {validAction}{" "}
+              <span className="font-semibold">
+                {emailIds.length}{" "}
+                {emailIds.length === 1 ? "matching email" : "matching emails"}
+              </span>
+              . Execution is disabled until you explicitly confirm.
+            </>
+          ) : (
+            "This task cannot be executed because its action is invalid."
+          )}
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border">
+        <div className="border-b bg-gray-50 px-4 py-3">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Matching Emails
+          </h3>
+        </div>
+
+        {emails.length === 0 ? (
+          <p className="p-4 text-sm text-gray-600">
+            No matching emails found for this task.
+          </p>
+        ) : (
+          <div className="max-h-96 overflow-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead className="sticky top-0 bg-gray-50">
+                <tr className="border-b">
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                    Sender
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                    Subject
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                    Date
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {emails.map((email) => (
+                  <tr key={email.id} className="border-b last:border-b-0">
+                    <td className="max-w-xs px-4 py-3 text-gray-700">
+                      <div className="truncate" title={email.sender}>
+                        {email.sender || "Unknown sender"}
+                      </div>
+                    </td>
+                    <td className="max-w-md px-4 py-3 text-gray-900">
+                      <div className="truncate" title={email.subject}>
+                        {email.subject || "(No subject)"}
+                      </div>
+                      {email.snippet ? (
+                        <div
+                          className="mt-1 truncate text-xs text-gray-500"
+                          title={email.snippet}
+                        >
+                          {email.snippet}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                      {email.date}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {executionResult ? (
+        <TaskExecutionResult
+          result={executionResult}
+          isRetrying={isExecuting}
+          onClose={() => setExecutionResult(null)}
+          onRetry={
+            executionResult.status === "error" && validAction
+              ? () => {
+                  void executeTask();
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
+      {isExecuting && validAction ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm font-semibold text-blue-900">
+            Executing Task...
+          </p>
+          <p className="mt-1 text-sm text-blue-700">
+            {getExecutingLabel(validAction)}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isExecuting}
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsConfirmationOpen(true)}
+          disabled={!canConfirm}
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {validAction
+            ? `Confirm ${getActionLabel(validAction)}`
+            : "Cannot Execute"}
+        </button>
+      </div>
+
+      {validAction ? (
+        <TaskConfirmationDialog
+          open={isConfirmationOpen}
+          taskName={taskName}
+          action={validAction}
+          foundCount={emailIds.length}
+          analyzedCount={analysis.analyzedCount}
+          riskLevel={analysis.riskLevel}
+          warnings={analysis.warnings}
+          isExecuting={isExecuting}
+          onCancel={() => {
+            if (!isExecuting) {
+              setIsConfirmationOpen(false);
+            }
+          }}
+          onConfirm={() => {
+            void executeTask();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+
+--- FILE: components/TaskConfirmationDialog.tsx ---
+
+"use client";
+
+export type ConfirmableTaskAction = "delete" | "archive" | "download";
+
+type TaskConfirmationDialogProps = {
+  open: boolean;
+  taskName: string;
+  action: ConfirmableTaskAction;
+  foundCount: number;
+  analyzedCount: number;
+  riskLevel: "low" | "medium" | "high" | "unknown";
+  warnings: string[];
+  isExecuting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function getActionLabel(action: ConfirmableTaskAction): string {
+  if (action === "delete") {
+    return "Delete";
+  }
+
+  if (action === "archive") {
+    return "Archive";
+  }
+
+  return "Download";
+}
+
+function getConfirmButtonClass(action: ConfirmableTaskAction): string {
+  if (action === "delete") {
+    return "bg-red-600 hover:bg-red-700 focus:ring-red-500";
+  }
+
+  if (action === "archive") {
+    return "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500";
+  }
+
+  return "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500";
+}
+
+function getRiskClass(riskLevel: TaskConfirmationDialogProps["riskLevel"]) {
+  if (riskLevel === "high") {
+    return "bg-red-50 text-red-700 ring-red-200";
+  }
+
+  if (riskLevel === "medium") {
+    return "bg-yellow-50 text-yellow-800 ring-yellow-200";
+  }
+
+  if (riskLevel === "low") {
+    return "bg-green-50 text-green-700 ring-green-200";
+  }
+
+  return "bg-gray-50 text-gray-700 ring-gray-200";
+}
+
+export function TaskConfirmationDialog({
+  open,
+  taskName,
+  action,
+  foundCount,
+  analyzedCount,
+  riskLevel,
+  warnings,
+  isExecuting,
+  onCancel,
+  onConfirm,
+}: TaskConfirmationDialogProps) {
+  if (!open) {
+    return null;
+  }
+
+  const actionLabel = getActionLabel(action);
+  const confirmLabel = `Confirm ${actionLabel}`;
+  const isLargeExecution = foundCount > 500;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-confirmation-title"
+    >
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+        <div className="border-b px-6 py-4">
+          <h2
+            id="task-confirmation-title"
+            className="text-lg font-semibold text-gray-900"
+          >
+            Confirm Task Execution
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Review the impact before running this task.
+          </p>
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Task Name
+            </p>
+            <p className="mt-1 text-sm font-semibold text-gray-900">
+              {taskName}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Action
+              </p>
+              <p className="mt-1 text-base font-semibold text-gray-900">
+                {actionLabel}
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Found
+              </p>
+              <p className="mt-1 text-base font-semibold text-gray-900">
+                {foundCount} {foundCount === 1 ? "Email" : "Emails"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Analyzed
+              </p>
+              <p className="mt-1 text-base font-semibold text-gray-900">
+                {analyzedCount} {analyzedCount === 1 ? "Email" : "Emails"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Risk
+              </p>
+              <span
+                className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ${getRiskClass(
+                  riskLevel
+                )}`}
+              >
+                {riskLevel}
+              </span>
+            </div>
+          </div>
+
+          {isLargeExecution ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-semibold text-red-900">
+                Large Execution Warning
+              </p>
+              <p className="mt-1 text-sm text-red-800">
+                This task will affect {foundCount} emails. Please review the
+                impact carefully before confirming.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+            <p className="text-sm font-semibold text-yellow-900">
+              Impact Summary
+            </p>
+            <p className="mt-1 text-sm text-yellow-800">
+              This will {action} {" "}
+              <span className="font-semibold">
+                {foundCount} {foundCount === 1 ? "email" : "emails"}
+              </span>
+              . This action uses the existing production {action} handler.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Warnings</p>
+
+            {warnings.length === 0 ? (
+              <p className="mt-2 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600">
+                No warnings detected.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {warnings.map((warning, index) => (
+                  <li
+                    key={`${warning}-${index}`}
+                    className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
+                  >
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 border-t px-6 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isExecuting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isExecuting}
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${getConfirmButtonClass(
+              action
+            )}`}
+          >
+            {isExecuting ? "Executing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+--- FILE: components/TaskExecutionResult.tsx ---
+
+"use client";
+
+import type { ConfirmableTaskAction } from "@/components/TaskConfirmationDialog";
+
+export type TaskExecutionStatus = "success" | "error";
+
+export type TaskExecutionResultData = {
+  status: TaskExecutionStatus;
+  taskName: string;
+  action: ConfirmableTaskAction;
+  affectedCount: number;
+  executionTimeMs: number;
+  completedAt: string;
+  message?: string;
+  error?: string;
+};
+
+type TaskExecutionResultProps = {
+  result: TaskExecutionResultData;
+  onClose: () => void;
+  onRetry?: () => void;
+  isRetrying?: boolean;
+};
+
+function getActionLabel(action: ConfirmableTaskAction): string {
+  if (action === "delete") {
+    return "Delete";
+  }
+
+  if (action === "archive") {
+    return "Archive";
+  }
+
+  return "Download";
+}
+
+function formatExecutionTime(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`;
+  }
+
+  return `${(ms / 1000).toFixed(2)} sec`;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+export function TaskExecutionResult({
+  result,
+  onClose,
+  onRetry,
+  isRetrying = false,
+}: TaskExecutionResultProps) {
+  const isSuccess = result.status === "success";
+
+  return (
+    <div
+      className={`rounded-xl border p-5 ${
+        isSuccess
+          ? "border-green-200 bg-green-50"
+          : "border-red-200 bg-red-50"
+      }`}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3
+            className={`text-lg font-semibold ${
+              isSuccess ? "text-green-900" : "text-red-900"
+            }`}
+          >
+            {isSuccess ? "Task Completed" : "Task Failed"}
+          </h3>
+
+          <p
+            className={`mt-1 text-sm ${
+              isSuccess ? "text-green-700" : "text-red-700"
+            }`}
+          >
+            {result.taskName}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          {!isSuccess && onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={isRetrying}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRetrying ? "Retrying..." : "Retry"}
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isRetrying}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg bg-white p-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Action
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-gray-900">
+            {getActionLabel(result.action)}
+          </dd>
+        </div>
+
+        <div className="rounded-lg bg-white p-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Affected
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-gray-900">
+            {result.affectedCount} {" "}
+            {result.affectedCount === 1 ? "Email" : "Emails"}
+          </dd>
+        </div>
+
+        <div className="rounded-lg bg-white p-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Execution Time
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-gray-900">
+            {formatExecutionTime(result.executionTimeMs)}
+          </dd>
+        </div>
+
+        <div className="rounded-lg bg-white p-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Completed
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-gray-900">
+            {formatTimestamp(result.completedAt)}
+          </dd>
+        </div>
+      </dl>
+
+      {result.message ? (
+        <p
+          className={`mt-4 rounded-lg bg-white p-4 text-sm ${
+            isSuccess ? "text-green-800" : "text-red-800"
+          }`}
+        >
+          {result.message}
+        </p>
+      ) : null}
+
+      {result.error ? (
+        <div className="mt-4 rounded-lg bg-white p-4">
+          <p className="text-sm font-semibold text-red-900">Reason:</p>
+          <p className="mt-1 text-sm text-red-800">{result.error}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+--- FILE: lib/task-preview.ts ---
+
+import {
+  analyzeEmails,
+  detectRisk,
+  summarizeEmails,
+} from "@/lib/ai";
+import type { EmailMetadata } from "@/types/ai";
+import type {
+  TaskPreviewDefinition,
+  TaskPreviewEmail,
+  TaskRunResult,
+} from "@/types/task-preview";
+
+type ExecuteTaskSearch<TSearch> = (
+  task: TaskPreviewDefinition<TSearch>
+) => Promise<TaskPreviewEmail[]>;
+
+function sanitizeEmailMetadata(email: TaskPreviewEmail): TaskPreviewEmail {
+  return {
+    id: email.id,
+    sender: email.sender.slice(0, 160),
+    subject: email.subject.slice(0, 240),
+    snippet: email.snippet.slice(0, 280),
+    date: email.date.slice(0, 80),
+  };
+}
+
+function toEmailMetadata(emails: TaskPreviewEmail[]): EmailMetadata[] {
+  return emails.map((email) => ({
+    sender: email.sender,
+    subject: email.subject,
+    snippet: email.snippet,
+    date: email.date,
+  }));
+}
+
+/**
+ * Preview-only task runner.
+ *
+ * This function intentionally does NOT call archiveEmails(), deleteEmails(),
+ * getAttachment(), export helpers, or any Gmail mutation operation.
+ *
+ * AI analysis is limited to first 50 emails to keep costs predictable.
+ * Total match count is shown separately.
+ */
+export async function runTaskPreview<TSearch>(
+  task: TaskPreviewDefinition<TSearch>,
+  executeSearch: ExecuteTaskSearch<TSearch>
+): Promise<TaskRunResult> {
+  const rawEmails = await executeSearch(task);
+
+  const emails = rawEmails.map(sanitizeEmailMetadata);
+  const analysisSample = emails.slice(0, 50);
+  const metadata = toEmailMetadata(analysisSample);
+
+  const [analysis, risk, summary] = await Promise.all([
+    analyzeEmails(metadata),
+    detectRisk(metadata),
+    summarizeEmails(metadata),
+  ]);
+
+  return {
+    taskId: task.id,
+    title: task.title,
+    action: task.action,
+    foundCount: emails.length,
+    analyzedCount: analysisSample.length,
+    emails,
+    analysis,
+    risk,
+    summary,
+    ranAt: new Date().toISOString(),
+  };
+}
+
+
+--- FILE: lib/tasks/task-storage.ts ---
+
+import {
+  TASK_STORAGE_KEY,
+  type CreateTaskInput,
+  type Task,
+  type UpdateTaskInput,
+} from "./task-types";
+import { isTask, validateTaskInput } from "./task-validator";
+
+function ensureBrowserStorage(): Storage {
+  if (typeof window === "undefined") {
+    throw new Error("Task storage is only available in the browser.");
+  }
+
+  return window.localStorage;
+}
+
+function createTaskId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `task_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function writeTasks(tasks: Task[]): void {
+  const storage = ensureBrowserStorage();
+  storage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
+}
+
+export function getTasks(): Task[] {
+  try {
+    const storage = ensureBrowserStorage();
+    const rawTasks = storage.getItem(TASK_STORAGE_KEY);
+
+    if (!rawTasks) {
+      return [];
+    }
+
+    const parsedTasks = JSON.parse(rawTasks) as unknown;
+
+    if (!Array.isArray(parsedTasks)) {
+      return [];
+    }
+
+    return parsedTasks.filter(isTask);
+  } catch {
+    return [];
+  }
+}
+
+export function saveTask(input: CreateTaskInput): Task {
+  const existingTasks = getTasks();
+  const validation = validateTaskInput(input, existingTasks);
+
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const now = new Date().toISOString();
+
+  const task: Task = {
+    id: createTaskId(),
+    name: validation.task.name,
+    query: validation.task.query,
+    action: validation.task.action,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    writeTasks([task, ...existingTasks]);
+    return task;
+  } catch {
+    throw new Error("Unable to save task. Please check your browser storage.");
+  }
+}
+
+export function deleteTask(id: string): void {
+  const existingTasks = getTasks();
+  const nextTasks = existingTasks.filter((task) => task.id !== id);
+
+  try {
+    writeTasks(nextTasks);
+  } catch {
+    throw new Error("Unable to delete task. Please check your browser storage.");
+  }
+}
+
+export function updateTask(id: string, input: UpdateTaskInput): Task {
+  const existingTasks = getTasks();
+  const currentTask = existingTasks.find((task) => task.id === id);
+
+  if (!currentTask) {
+    throw new Error("Task not found.");
+  }
+
+  const mergedInput: CreateTaskInput = {
+    name: input.name ?? currentTask.name,
+    query: input.query ?? currentTask.query,
+    action: input.action ?? currentTask.action,
+  };
+
+  const validation = validateTaskInput(mergedInput, existingTasks, id);
+
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const updatedTask: Task = {
+    ...currentTask,
+    name: validation.task.name,
+    query: validation.task.query,
+    action: validation.task.action,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const nextTasks = existingTasks.map((task) =>
+    task.id === id ? updatedTask : task
+  );
+
+  try {
+    writeTasks(nextTasks);
+    return updatedTask;
+  } catch {
+    throw new Error("Unable to update task. Please check your browser storage.");
+  }
+}
