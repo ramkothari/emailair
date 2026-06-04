@@ -8,6 +8,7 @@ type ExecutionConfirmationModalProps = {
   emailCount: number;
   riskLevel?: string | null;
   isExecuting?: boolean;
+  progressText?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -34,6 +35,7 @@ export function ExecutionConfirmationModal({
   emailCount,
   riskLevel,
   isExecuting = false,
+  progressText = null,
   onCancel,
   onConfirm,
 }: ExecutionConfirmationModalProps) {
@@ -77,7 +79,8 @@ export function ExecutionConfirmationModal({
           <div className="mt-5 rounded-md border bg-gray-50 p-3 text-sm text-gray-700">
             <p className="font-medium">Executing...</p>
             <p className="mt-1">
-              Please keep this page open while EmailAir processes your request.
+              {progressText ??
+                "Please keep this page open while EmailAir processes your request."}
             </p>
           </div>
         ) : null}

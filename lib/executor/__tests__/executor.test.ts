@@ -75,6 +75,7 @@ describe("executor Gmail adapters", () => {
       },
       {
         batchSize: 5,
+        batchDelayMs: 0,
         retryBackoffMs: [0, 0, 0],
         onProgress: (progress) => {
           progressSnapshots.push(progress);
@@ -130,6 +131,7 @@ describe("executor Gmail adapters", () => {
       },
       {
         batchSize: 5,
+        batchDelayMs: 0,
         retryBackoffMs: [0, 0, 0],
       }
     );
@@ -149,7 +151,7 @@ describe("executor Gmail adapters", () => {
     );
   });
 
-  it("keeps batching intact for 100 emails", async () => {
+  it("uses the default batch size for 100 emails", async () => {
     const emailIds = createIds(100);
 
     const result = await executeAction(
@@ -161,7 +163,7 @@ describe("executor Gmail adapters", () => {
         },
       },
       {
-        batchSize: 5,
+        batchDelayMs: 0,
         retryBackoffMs: [0, 0, 0],
       }
     );
@@ -170,7 +172,12 @@ describe("executor Gmail adapters", () => {
     expect(result.total).toBe(100);
     expect(result.succeeded).toBe(100);
     expect(result.failed).toBe(0);
-    expect(mockedArchiveEmails).toHaveBeenCalledTimes(20);
+    expect(mockedArchiveEmails).toHaveBeenCalledTimes(4);
+    expect(mockedArchiveEmails).toHaveBeenNthCalledWith(
+      1,
+      "test-access-token",
+      emailIds.slice(0, 25)
+    );
   });
 
   it("retries failed batches without changing retry behavior", async () => {
@@ -190,6 +197,7 @@ describe("executor Gmail adapters", () => {
       },
       {
         batchSize: 5,
+        batchDelayMs: 0,
         retryAttempts: 3,
         retryBackoffMs: [0, 0, 0],
       }
@@ -220,6 +228,7 @@ describe("executor Gmail adapters", () => {
       },
       {
         batchSize: 5,
+        batchDelayMs: 0,
         retryAttempts: 3,
         retryBackoffMs: [0, 0, 0],
       }
@@ -246,6 +255,7 @@ describe("executor Gmail adapters", () => {
       },
       {
         batchSize: 5,
+        batchDelayMs: 0,
         retryAttempts: 1,
         retryBackoffMs: [0],
       }

@@ -3,6 +3,78 @@ import type { gmail_v1 } from "googleapis";
 import type { Email } from "@/types/email";
 import type { EmailFilter } from "@/types/filter";
 
+const DEFAULT_GMAIL_BULK_BATCH_SIZE = 25;
+const DEFAULT_GMAIL_BULK_BATCH_DELAY_MS = 350;
+
+function getPositiveIntegerEnv(name: string, fallback: number): number {
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsedValue = Number(rawValue);
+
+  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+    return fallback;
+  }
+
+  return parsedValue;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function createBatches<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    batches.push(items.slice(index, index + batchSize));
+  }
+
+  return batches;
+}
+
+async function processGmailIdsInBatches(
+  ids: string[],
+  operation: (id: string) => Promise<unknown>
+): Promise<void> {
+  const batchSize = getPositiveIntegerEnv(
+    "GMAIL_BULK_BATCH_SIZE",
+    DEFAULT_GMAIL_BULK_BATCH_SIZE
+  );
+  const batchDelayMs = getPositiveIntegerEnv(
+    "GMAIL_BULK_BATCH_DELAY_MS",
+    DEFAULT_GMAIL_BULK_BATCH_DELAY_MS
+  );
+  const batches = createBatches(ids, batchSize);
+  const failedIds: string[] = [];
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
+    const results = await Promise.allSettled(batch.map((id) => operation(id)));
+
+    results.forEach((result, resultIndex) => {
+      if (result.status === "rejected") {
+        failedIds.push(batch[resultIndex]);
+      }
+    });
+
+    if (batchIndex < batches.length - 1) {
+      await sleep(batchDelayMs);
+    }
+  }
+
+  if (failedIds.length > 0) {
+    throw new Error(
+      `Gmail API failed for ${failedIds.length} of ${ids.length} emails.`
+    );
+  }
+}
+
 function getHeader(
   headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
   name: string
@@ -189,13 +261,11 @@ export async function deleteEmails(
     auth,
   });
 
-  await Promise.all(
-    ids.map((id) =>
-      gmail.users.messages.trash({
-        userId: "me",
-        id,
-      })
-    )
+  await processGmailIdsInBatches(ids, (id) =>
+    gmail.users.messages.trash({
+      userId: "me",
+      id,
+    })
   );
 }
 
@@ -218,16 +288,14 @@ export async function archiveEmails(
     auth,
   });
 
-  await Promise.all(
-    ids.map((id) =>
-      gmail.users.messages.modify({
-        userId: "me",
-        id,
-        requestBody: {
-          removeLabelIds: ["INBOX"],
-        },
-      })
-    )
+  await processGmailIdsInBatches(ids, (id) =>
+    gmail.users.messages.modify({
+      userId: "me",
+      id,
+      requestBody: {
+        removeLabelIds: ["INBOX"],
+      },
+    })
   );
 }
 

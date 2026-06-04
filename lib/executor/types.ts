@@ -52,6 +52,7 @@ export type ExecutorProgressHandler = (
 
 export type ExecuteActionOptions = {
   batchSize?: number;
+  batchDelayMs?: number;
   retryAttempts?: number;
   retryBackoffMs?: number[];
   onProgress?: ExecutorProgressHandler;

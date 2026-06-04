@@ -1,4 +1,4 @@
-export const DEFAULT_BATCH_SIZE = 5;
+export const DEFAULT_BATCH_SIZE = 25;
 
 export function createBatches<T>(
   items: T[],

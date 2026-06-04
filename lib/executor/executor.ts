@@ -16,6 +16,13 @@ import type {
 } from "./types";
 
 const SUPPORTED_ACTIONS: ActionType[] = ["delete", "archive", "download"];
+const DEFAULT_BATCH_DELAY_MS = 350;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function isSupportedAction(action: string): action is ActionType {
   return SUPPORTED_ACTIONS.includes(action as ActionType);
@@ -83,6 +90,7 @@ export async function executeAction(
   const total = emailIds.length;
 
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
+  const batchDelayMs = options.batchDelayMs ?? DEFAULT_BATCH_DELAY_MS;
   const retryAttempts = options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS;
   const retryBackoffMs = options.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
 
@@ -152,6 +160,10 @@ export async function executeAction(
         }),
         options.onProgress
       );
+    }
+
+    if (batchIndex < batches.length - 1 && batchDelayMs > 0) {
+      await sleep(batchDelayMs);
     }
   }
 

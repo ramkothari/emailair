@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { ExportSelectedButton } from "@/components/ExportSelectedButton";
 import type { Email, EmailActionResult } from "@/types/email";
 
+const BULK_ACTION_BATCH_SIZE = 25;
+const BULK_ACTION_BATCH_DELAY_MS = 350;
+
 type EmailTableProps = {
   emails: Email[];
   onDeleteSelected: (ids: string[]) => Promise<EmailActionResult>;
@@ -18,6 +21,27 @@ type EmailTableProps = {
   isLoadingMore?: boolean;
   showExportSelected?: boolean;
 };
+
+type BulkActionProgress = {
+  completed: number;
+  total: number;
+};
+
+function createBatches<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    batches.push(items.slice(index, index + batchSize));
+  }
+
+  return batches;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 export function EmailTable({
   emails,
@@ -37,6 +61,8 @@ export function EmailTable({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [message, setMessage] = useState<EmailActionResult | null>(null);
+  const [bulkActionProgress, setBulkActionProgress] =
+    useState<BulkActionProgress | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const selectedCount = selectedIds.length;
@@ -81,6 +107,59 @@ export function EmailTable({
     setSelectedIds(emails.map((email) => email.id));
   }
 
+  async function executeSelectedInBatches(
+    ids: string[],
+    action: "archive" | "delete"
+  ): Promise<EmailActionResult> {
+    const batches = createBatches(ids, BULK_ACTION_BATCH_SIZE);
+    const failedMessages: string[] = [];
+    let completed = 0;
+
+    setBulkActionProgress({
+      completed,
+      total: ids.length,
+    });
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      const batch = batches[batchIndex];
+      const result =
+        action === "archive"
+          ? await onArchiveSelected(batch)
+          : await onDeleteSelected(batch);
+
+      completed += batch.length;
+      setBulkActionProgress({
+        completed,
+        total: ids.length,
+      });
+
+      if (!result.success) {
+        failedMessages.push(result.message);
+      }
+
+      if (batchIndex < batches.length - 1) {
+        await sleep(BULK_ACTION_BATCH_DELAY_MS);
+      }
+    }
+
+    setBulkActionProgress(null);
+
+    if (failedMessages.length > 0) {
+      return {
+        success: false,
+        message: failedMessages[0],
+      };
+    }
+
+    return {
+      success: true,
+      message:
+        action === "archive"
+          ? `Archived ${ids.length} email${ids.length === 1 ? "" : "s"}.`
+          : `Moved ${ids.length} email${ids.length === 1 ? "" : "s"} to Trash.`,
+    };
+  }
+
   function handleDeleteSelected() {
     if (!hasSelection) {
       setMessage({
@@ -94,7 +173,7 @@ export function EmailTable({
 
     startTransition(() => {
       void (async () => {
-        const result = await onDeleteSelected(idsToDelete);
+        const result = await executeSelectedInBatches(idsToDelete, "delete");
 
         setMessage(result);
 
@@ -119,7 +198,7 @@ export function EmailTable({
 
     startTransition(() => {
       void (async () => {
-        const result = await onArchiveSelected(idsToArchive);
+        const result = await executeSelectedInBatches(idsToArchive, "archive");
 
         setMessage(result);
 
@@ -298,6 +377,13 @@ export function EmailTable({
           >
             {isLoadingMore ? "Loading..." : "Load More"}
           </button>
+        </div>
+      ) : null}
+
+      {bulkActionProgress ? (
+        <div className="border-b bg-blue-50 px-6 py-3 text-sm text-blue-700">
+          Completed {bulkActionProgress.completed.toLocaleString()} of{" "}
+          {bulkActionProgress.total.toLocaleString()} emails.
         </div>
       ) : null}
     </div>

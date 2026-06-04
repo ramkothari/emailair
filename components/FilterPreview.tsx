@@ -15,6 +15,8 @@ import type { Email } from "@/types/email";
 
 const AI_ANALYSIS_EMAIL_LIMIT = 100;
 const EXECUTION_LIMIT = 100;
+const EXECUTION_BATCH_SIZE = 25;
+const EXECUTION_BATCH_DELAY_MS = 350;
 const EXECUTION_LIMIT_MESSAGE =
   "Archive and Move To Trash support up to 100 emails per execution. Please narrow your search or select fewer emails.";
 
@@ -52,6 +54,22 @@ function normalizeExecutionIds(ids: string[]): string[] {
   );
 }
 
+function createBatches<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+
+  for (let index = 0; index < items.length; index += batchSize) {
+    batches.push(items.slice(index, index + batchSize));
+  }
+
+  return batches;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export function FilterPreview({
   totalMatches,
   emails,
@@ -67,6 +85,10 @@ export function FilterPreview({
   const [executionResult, setExecutionResult] = useState<ExecuteActionResult | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecutingAction, setIsExecutingAction] = useState(false);
+  const [executionProgress, setExecutionProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
 
   const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
   const searchResultEmailIds = useMemo(
@@ -88,6 +110,10 @@ export function FilterPreview({
       })),
     [emails]
   );
+
+  useEffect(() => {
+    setAnalysisResult(null);
+  }, [emailMetadata]);
 
   useEffect(() => {
     setSelectedIds((currentSelectedIds) => {
@@ -163,25 +189,66 @@ export function FilterPreview({
 
     setIsExecutingAction(true);
     setExecutionError(null);
+    setExecutionProgress({
+      completed: 0,
+      total: executionTarget.ids.length,
+    });
 
     try {
-      const response = await executeBulkAction({
-        action: executionTarget.action,
-        emailIds: executionTarget.ids,
-      });
+      const batches = createBatches(executionTarget.ids, EXECUTION_BATCH_SIZE);
+      const startedAt = Date.now();
+      let succeeded = 0;
+      let failed = 0;
+      const failedIds: string[] = [];
+      let completed = 0;
+      let firstError: string | null = null;
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batch = batches[batchIndex];
+        const response = await executeBulkAction({
+          action: executionTarget.action,
+          emailIds: batch,
+        });
+
+        if (!response.ok) {
+          failed += batch.length;
+          failedIds.push(...batch);
+          firstError ??= response.error;
+        } else {
+          succeeded += response.result.succeeded;
+          failed += response.result.failed;
+          failedIds.push(...response.result.failedIds);
+        }
+
+        completed += batch.length;
+        setExecutionProgress({
+          completed,
+          total: executionTarget.ids.length,
+        });
+
+        if (batchIndex < batches.length - 1) {
+          await sleep(EXECUTION_BATCH_DELAY_MS);
+        }
+      }
+
+      const result: ExecuteActionResult = {
+        success: failed === 0,
+        total: executionTarget.ids.length,
+        succeeded,
+        failed,
+        failedIds,
+        durationMs: Date.now() - startedAt,
+      };
 
       setResultTarget(executionTarget);
       setExecutionTarget(null);
+      setExecutionResult(result);
 
-      if (!response.ok) {
-        setExecutionResult(null);
-        setExecutionError(response.error);
-        return;
+      if (firstError && failed === executionTarget.ids.length) {
+        setExecutionError(firstError);
       }
 
-      setExecutionResult(response.result);
-
-      if (response.result.succeeded === response.result.total) {
+      if (result.succeeded === result.total) {
         setSelectedIds(new Set());
         await onRefreshPreview();
       }
@@ -196,6 +263,7 @@ export function FilterPreview({
       );
     } finally {
       setIsExecutingAction(false);
+      setExecutionProgress(null);
     }
   }
 
@@ -425,6 +493,11 @@ export function FilterPreview({
         emailCount={executionTarget?.ids.length ?? 0}
         riskLevel={executionTarget?.riskLevel}
         isExecuting={isExecutingAction}
+        progressText={
+          executionProgress
+            ? `Completed ${executionProgress.completed.toLocaleString()} of ${executionProgress.total.toLocaleString()} emails.`
+            : null
+        }
         onCancel={() => {
           if (!isExecutingAction) {
             setExecutionTarget(null);
