@@ -30,12 +30,12 @@ export function AttachmentInsights({ stats }: AttachmentInsightsProps) {
       value: formatNumber(stats.emailsWithAttachments),
     },
     {
-      label: "Total Attachments",
-      value: formatNumber(stats.totalAttachments),
+      label: "Largest Attachment Email",
+      value: formatBytes(stats.largestMessageSizeEstimate),
     },
     {
-      label: "Largest Attachment Found",
-      value: formatBytes(stats.largestAttachmentSize),
+      label: "Attachment Email Size Estimate",
+      value: formatBytes(stats.estimatedAttachmentMessageBytes),
     },
   ];
 

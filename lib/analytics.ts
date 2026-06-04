@@ -1,48 +1,119 @@
-import { cache } from "react";
 import type { gmail_v1 } from "googleapis";
 import { getGmailClient } from "@/lib/gmail";
 import type {
+  ActivityTrend,
   AttachmentStats,
-  CleanupCandidate,
+  CategoryStat,
+  EmailAgeBucket,
   EmailAnalytics,
-  OverviewStats,
+  InboxHealth,
+  NewsletterInsights,
+  SenderInsights,
   SenderStat,
 } from "@/types/analytics";
 
-const MAX_ANALYTICS_EMAILS = 200;
+const MAX_ANALYTICS_EMAILS = 100_000;
+const DEFAULT_ANALYTICS_EMAILS = 1_000;
+const GMAIL_PAGE_SIZE = 500;
+const DETAIL_CONCURRENCY = 20;
+const ANALYTICS_CACHE_TTL_MS = 15 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 type AttachmentInfo = {
   count: number;
   largestSize: number;
+  estimatedBytes: number;
 };
 
-type AnalyticsEmail = {
-  id: string;
-  sender: string;
+type MetadataEmail = {
   senderName: string;
   subject: string;
-  date: string;
   timestamp: number;
   labelIds: string[];
-  hasAttachments: boolean;
-  attachmentCount: number;
-  largestAttachmentSize: number;
+  hasNewsletterHeaders: boolean;
 };
+
+type AnalyticsAccumulator = {
+  totalScanned: number;
+  unreadEmails: number;
+  starredEmails: number;
+  importantEmails: number;
+  categoryCounts: Map<string, number>;
+  ageCounts: Map<string, number>;
+  senderCounts: Map<string, number>;
+  newsletterSenderCounts: Map<string, number>;
+  monthCounts: Map<string, number>;
+  weekdayCounts: Map<string, number>;
+};
+
+type AnalyticsCacheEntry = {
+  result: EmailAnalytics;
+  generatedAt: number;
+  analyzedEmailCount: number;
+};
+
+type AnalyticsOptions = {
+  forceRefresh?: boolean;
+};
+
+const analyticsCache = new Map<string, AnalyticsCacheEntry>();
+
+const CATEGORY_LABELS: Array<{
+  labelId: string;
+  label: string;
+}> = [
+  { labelId: "CATEGORY_PERSONAL", label: "Primary" },
+  { labelId: "CATEGORY_SOCIAL", label: "Social" },
+  { labelId: "CATEGORY_PROMOTIONS", label: "Promotions" },
+  { labelId: "CATEGORY_UPDATES", label: "Updates" },
+  { labelId: "CATEGORY_FORUMS", label: "Forums" },
+];
+
+const AGE_BUCKETS: Array<{
+  key: string;
+  label: string;
+  maxDays?: number;
+}> = [
+  { key: "last7", label: "Last 7 Days", maxDays: 7 },
+  { key: "last30", label: "8-30 Days", maxDays: 30 },
+  { key: "last90", label: "31-90 Days", maxDays: 90 },
+  { key: "last365", label: "91-365 Days", maxDays: 365 },
+  { key: "older", label: "Older Than 1 Year" },
+];
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function createAccumulator(): AnalyticsAccumulator {
+  return {
+    totalScanned: 0,
+    unreadEmails: 0,
+    starredEmails: 0,
+    importantEmails: 0,
+    categoryCounts: new Map(),
+    ageCounts: new Map(),
+    senderCounts: new Map(),
+    newsletterSenderCounts: new Map(),
+    monthCounts: new Map(),
+    weekdayCounts: new Map(),
+  };
+}
 
 function getHeader(
   headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
   name: string
 ): string {
-  if (!headers) {
-    return "";
-  }
-
-  const header = headers.find(
-    (item) => item.name?.toLowerCase() === name.toLowerCase()
+  return (
+    headers?.find(
+      (item) => item.name?.toLowerCase() === name.toLowerCase()
+    )?.value ?? ""
   );
+}
 
-  return header?.value ?? "";
+function cleanSenderName(value: string): string {
+  return value
+    .replace(/^"+|"+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseSenderName(sender: string): string {
@@ -69,13 +140,6 @@ function parseSenderName(sender: string): string {
   return cleanSenderName(trimmed);
 }
 
-function cleanSenderName(value: string): string {
-  return value
-    .replace(/^"+|"+$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function getMessageTimestamp(message: gmail_v1.Schema$Message): number {
   if (message.internalDate) {
     const internalDate = Number(message.internalDate);
@@ -95,66 +159,281 @@ function getMessageTimestamp(message: gmail_v1.Schema$Message): number {
   return Date.now();
 }
 
-function extractAttachmentInfo(
-  part: gmail_v1.Schema$MessagePart | undefined
-): AttachmentInfo {
-  if (!part) {
-    return {
-      count: 0,
-      largestSize: 0,
-    };
-  }
+function getCategory(labelIds: string[]): string {
+  const category = CATEGORY_LABELS.find((item) =>
+    labelIds.includes(item.labelId)
+  );
 
-  let count = 0;
-  let largestSize = 0;
-
-  const filename = part.filename?.trim();
-  const bodySize = part.body?.size ?? 0;
-  const hasAttachmentId = Boolean(part.body?.attachmentId);
-
-  if (filename && (hasAttachmentId || bodySize > 0)) {
-    count += 1;
-    largestSize = Math.max(largestSize, bodySize);
-  }
-
-  for (const childPart of part.parts ?? []) {
-    const childInfo = extractAttachmentInfo(childPart);
-
-    count += childInfo.count;
-    largestSize = Math.max(largestSize, childInfo.largestSize);
-  }
-
-  return {
-    count,
-    largestSize,
-  };
+  return category?.label ?? "Uncategorized";
 }
 
-function isOlderThan(timestamp: number, days: number): boolean {
-  return Date.now() - timestamp > days * ONE_DAY_MS;
+function getAgeBucket(timestamp: number): string {
+  const ageDays = Math.floor((Date.now() - timestamp) / ONE_DAY_MS);
+
+  for (const bucket of AGE_BUCKETS) {
+    if (bucket.maxDays !== undefined && ageDays <= bucket.maxDays) {
+      return bucket.key;
+    }
+  }
+
+  return "older";
 }
 
-function isPromotionalEmail(email: AnalyticsEmail): boolean {
-  const searchableText = `${email.sender} ${email.senderName} ${email.subject}`
-    .toLowerCase()
-    .trim();
+function getMonthKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function hasNewsletterSignal(input: {
+  sender: string;
+  subject: string;
+  listUnsubscribe: string;
+  listId: string;
+  precedence: string;
+  labelIds: string[];
+}): boolean {
+  const searchableText = `${input.sender} ${input.subject}`.toLowerCase();
 
   return (
-    email.labelIds.includes("CATEGORY_PROMOTIONS") ||
-    searchableText.includes("promotion") ||
-    searchableText.includes("promotional") ||
+    Boolean(input.listUnsubscribe || input.listId) ||
+    input.precedence.toLowerCase() === "bulk" ||
+    input.labelIds.includes("CATEGORY_PROMOTIONS") ||
     searchableText.includes("newsletter") ||
-    searchableText.includes("sale") ||
-    searchableText.includes("discount") ||
-    searchableText.includes("offer") ||
-    searchableText.includes("deal")
+    searchableText.includes("unsubscribe")
   );
 }
 
-function isLinkedInEmail(email: AnalyticsEmail): boolean {
-  const searchableText = `${email.sender} ${email.senderName}`.toLowerCase();
+function isNoReplySender(sender: string): boolean {
+  const normalized = sender.toLowerCase();
+  return (
+    normalized.includes("noreply") ||
+    normalized.includes("no-reply") ||
+    normalized.includes("donotreply") ||
+    normalized.includes("do-not-reply")
+  );
+}
 
-  return searchableText.includes("linkedin");
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<Array<PromiseSettledResult<R>>> {
+  const results: Array<PromiseSettledResult<R>> = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      try {
+        results[currentIndex] = {
+          status: "fulfilled",
+          value: await mapper(items[currentIndex]),
+        };
+      } catch (reason) {
+        results[currentIndex] = {
+          status: "rejected",
+          reason,
+        };
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker()
+  );
+
+  await Promise.all(workers);
+  return results;
+}
+
+function toMetadataEmail(message: gmail_v1.Schema$Message): MetadataEmail {
+  const headers = message.payload?.headers;
+  const sender = getHeader(headers, "From") || "Unknown sender";
+  const subject = getHeader(headers, "Subject") || "(No subject)";
+  const labelIds = message.labelIds ?? [];
+  const listUnsubscribe = getHeader(headers, "List-Unsubscribe");
+  const listId = getHeader(headers, "List-Id");
+  const precedence = getHeader(headers, "Precedence");
+
+  return {
+    senderName: parseSenderName(sender),
+    subject,
+    timestamp: getMessageTimestamp(message),
+    labelIds,
+    hasNewsletterHeaders: hasNewsletterSignal({
+      sender,
+      subject,
+      listUnsubscribe,
+      listId,
+      precedence,
+      labelIds,
+    }),
+  };
+}
+
+function increment(map: Map<string, number>, key: string, amount = 1): void {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function addEmailToAccumulator(
+  accumulator: AnalyticsAccumulator,
+  email: MetadataEmail
+): void {
+  accumulator.totalScanned += 1;
+
+  if (email.labelIds.includes("UNREAD")) {
+    accumulator.unreadEmails += 1;
+  }
+
+  if (email.labelIds.includes("STARRED")) {
+    accumulator.starredEmails += 1;
+  }
+
+  if (email.labelIds.includes("IMPORTANT")) {
+    accumulator.importantEmails += 1;
+  }
+
+  increment(accumulator.categoryCounts, getCategory(email.labelIds));
+  increment(accumulator.ageCounts, getAgeBucket(email.timestamp));
+  increment(accumulator.senderCounts, email.senderName);
+  increment(accumulator.monthCounts, getMonthKey(email.timestamp));
+  increment(
+    accumulator.weekdayCounts,
+    WEEKDAY_LABELS[new Date(email.timestamp).getDay()]
+  );
+
+  if (email.hasNewsletterHeaders) {
+    increment(accumulator.newsletterSenderCounts, email.senderName);
+  }
+}
+
+function toPercentage(count: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return Math.round((count / total) * 1000) / 10;
+}
+
+function sortEntriesByCount(entries: Array<[string, number]>): Array<[string, number]> {
+  return entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function getInboxHealth(
+  accumulator: AnalyticsAccumulator,
+  attachmentStats: AttachmentStats
+): InboxHealth {
+  const readEmails = accumulator.totalScanned - accumulator.unreadEmails;
+
+  return {
+    totalScanned: accumulator.totalScanned,
+    unreadEmails: accumulator.unreadEmails,
+    readEmails,
+    readRate: toPercentage(readEmails, accumulator.totalScanned),
+    starredEmails: accumulator.starredEmails,
+    importantEmails: accumulator.importantEmails,
+    emailsWithAttachments: attachmentStats.emailsWithAttachments,
+  };
+}
+
+function getCategoryBreakdown(
+  accumulator: AnalyticsAccumulator
+): CategoryStat[] {
+  const orderedCategories = [
+    ...CATEGORY_LABELS.map((item) => item.label),
+    "Uncategorized",
+  ];
+
+  return orderedCategories
+    .map((category) => {
+      const count = accumulator.categoryCounts.get(category) ?? 0;
+
+      return {
+        category,
+        count,
+        percentage: toPercentage(count, accumulator.totalScanned),
+      };
+    })
+    .filter((item) => item.count > 0);
+}
+
+function getAgeDistribution(
+  accumulator: AnalyticsAccumulator
+): EmailAgeBucket[] {
+  return AGE_BUCKETS.map((bucket) => {
+    const count = accumulator.ageCounts.get(bucket.key) ?? 0;
+
+    return {
+      label: bucket.label,
+      count,
+      percentage: toPercentage(count, accumulator.totalScanned),
+    };
+  });
+}
+
+function getSenderInsights(
+  accumulator: AnalyticsAccumulator
+): SenderInsights {
+  const senderEntries = Array.from(accumulator.senderCounts.entries());
+  const topSenders: SenderStat[] = sortEntriesByCount(senderEntries)
+    .slice(0, 10)
+    .map(([sender, count]) => ({
+      sender,
+      count,
+      percentage: toPercentage(count, accumulator.totalScanned),
+    }));
+
+  return {
+    uniqueSenders: senderEntries.length,
+    repeatSenders: senderEntries.filter(([, count]) => count > 1).length,
+    noReplySenders: senderEntries.filter(([sender]) => isNoReplySender(sender))
+      .length,
+    topSenders,
+  };
+}
+
+function getActivityTrends(accumulator: AnalyticsAccumulator): {
+  byMonth: ActivityTrend[];
+  byWeekday: ActivityTrend[];
+} {
+  return {
+    byMonth: Array.from(accumulator.monthCounts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .slice(-12),
+    byWeekday: WEEKDAY_LABELS.map((label) => ({
+      label,
+      count: accumulator.weekdayCounts.get(label) ?? 0,
+    })),
+  };
+}
+
+function getNewsletterInsights(
+  accumulator: AnalyticsAccumulator
+): NewsletterInsights {
+  const newsletterEntries = Array.from(
+    accumulator.newsletterSenderCounts.entries()
+  );
+  const newsletterEmails = newsletterEntries.reduce(
+    (total, [, count]) => total + count,
+    0
+  );
+
+  return {
+    newsletterEmails,
+    newsletterSenders: newsletterEntries.length,
+    topNewsletterSenders: sortEntriesByCount(newsletterEntries)
+      .slice(0, 10)
+      .map(([sender, count]) => ({
+        sender,
+        count,
+      })),
+  };
 }
 
 function getGmailErrorMessage(error: unknown): string {
@@ -169,7 +448,7 @@ function getGmailErrorMessage(error: unknown): string {
     }
 
     if (error.code === 403) {
-      return "Gmail read permission is missing. Please reconnect Gmail and approve Gmail access.";
+      return "Gmail metadata permission is missing. Please reconnect Gmail and approve Gmail access.";
     }
 
     if (error.code === 429) {
@@ -184,213 +463,222 @@ function getGmailErrorMessage(error: unknown): string {
   return "Failed to load email analytics.";
 }
 
-async function fetchLatestAnalyticsEmails(
+function createAnalyticsCacheKey(userKey: string, limit: number): string {
+  return `analytics:${userKey}:${limit}`;
+}
+
+function getValidCachedAnalytics(cacheKey: string): EmailAnalytics | null {
+  const cached = analyticsCache.get(cacheKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.generatedAt > ANALYTICS_CACHE_TTL_MS) {
+    analyticsCache.delete(cacheKey);
+    return null;
+  }
+
+  return {
+    ...cached.result,
+    cached: true,
+  };
+}
+
+async function aggregateEmailMetadata(
   accessToken: string,
   limit: number
-): Promise<AnalyticsEmail[]> {
+): Promise<{
+  accumulator: AnalyticsAccumulator;
+  scanComplete: boolean;
+}> {
   const safeLimit = Math.min(Math.max(limit, 1), MAX_ANALYTICS_EMAILS);
   const gmail = getGmailClient(accessToken);
-
-  const messageRefs: gmail_v1.Schema$Message[] = [];
+  const accumulator = createAccumulator();
   let pageToken: string | undefined;
+  let scanComplete = true;
 
-  while (messageRefs.length < safeLimit) {
-    const remaining = safeLimit - messageRefs.length;
-
+  while (accumulator.totalScanned < safeLimit) {
+    const remaining = safeLimit - accumulator.totalScanned;
     const listResponse = await gmail.users.messages.list({
       userId: "me",
-      maxResults: Math.min(500, remaining),
+      maxResults: Math.min(GMAIL_PAGE_SIZE, remaining),
       pageToken,
       labelIds: ["INBOX"],
     });
 
-    messageRefs.push(...(listResponse.data.messages ?? []));
-
+    const messageRefs = listResponse.data.messages ?? [];
     pageToken = listResponse.data.nextPageToken ?? undefined;
+
+    if (messageRefs.length === 0) {
+      scanComplete = !pageToken;
+      break;
+    }
+
+    const settledMessages = await mapWithConcurrency(
+      messageRefs,
+      DETAIL_CONCURRENCY,
+      async (messageRef): Promise<MetadataEmail> => {
+        if (!messageRef.id) {
+          throw new Error("Gmail message is missing an ID.");
+        }
+
+        const messageResponse = await gmail.users.messages.get({
+          userId: "me",
+          id: messageRef.id,
+          format: "metadata",
+          metadataHeaders: [
+            "From",
+            "Subject",
+            "Date",
+            "List-Unsubscribe",
+            "List-Id",
+            "Precedence",
+          ],
+        });
+
+        return toMetadataEmail(messageResponse.data);
+      }
+    );
+
+    for (const result of settledMessages) {
+      if (result.status === "fulfilled") {
+        addEmailToAccumulator(accumulator, result.value);
+      }
+    }
+
+    if (!pageToken) {
+      scanComplete = true;
+      break;
+    }
+
+    scanComplete = false;
+  }
+
+  return {
+    accumulator,
+    scanComplete,
+  };
+}
+
+async function aggregateAttachmentMetadata(
+  accessToken: string,
+  limit: number
+): Promise<AttachmentStats> {
+  const safeLimit = Math.min(Math.max(limit, 1), MAX_ANALYTICS_EMAILS);
+  const gmail = getGmailClient(accessToken);
+  let scanned = 0;
+  let pageToken: string | undefined;
+  let largestMessageSizeEstimate = 0;
+  let estimatedAttachmentMessageBytes = 0;
+
+  while (scanned < safeLimit) {
+    const remaining = safeLimit - scanned;
+    const listResponse = await gmail.users.messages.list({
+      userId: "me",
+      maxResults: Math.min(GMAIL_PAGE_SIZE, remaining),
+      pageToken,
+      labelIds: ["INBOX"],
+      q: "has:attachment",
+    });
+
+    const messageRefs = listResponse.data.messages ?? [];
+    pageToken = listResponse.data.nextPageToken ?? undefined;
+
+    if (messageRefs.length === 0) {
+      break;
+    }
+
+    const settledMessages = await mapWithConcurrency(
+      messageRefs,
+      DETAIL_CONCURRENCY,
+      async (messageRef): Promise<number> => {
+        if (!messageRef.id) {
+          throw new Error("Gmail message is missing an ID.");
+        }
+
+        const messageResponse = await gmail.users.messages.get({
+          userId: "me",
+          id: messageRef.id,
+          format: "metadata",
+          metadataHeaders: [],
+        });
+
+        return Number(messageResponse.data.sizeEstimate ?? 0);
+      }
+    );
+
+    for (const result of settledMessages) {
+      if (result.status === "fulfilled") {
+        scanned += 1;
+        largestMessageSizeEstimate = Math.max(
+          largestMessageSizeEstimate,
+          result.value
+        );
+        estimatedAttachmentMessageBytes += result.value;
+      }
+    }
 
     if (!pageToken) {
       break;
     }
   }
 
-  if (messageRefs.length === 0) {
-    return [];
-  }
+  return {
+    emailsWithAttachments: scanned,
+    largestMessageSizeEstimate,
+    estimatedAttachmentMessageBytes,
+  };
+}
 
-  const settledMessages = await Promise.allSettled(
-    messageRefs.map(async (messageRef): Promise<AnalyticsEmail> => {
-      if (!messageRef.id) {
-        throw new Error("Gmail message is missing an ID.");
+export async function getEmailAnalytics(
+  accessToken: string,
+  userKey: string,
+  limit: number = DEFAULT_ANALYTICS_EMAILS,
+  options: AnalyticsOptions = {}
+): Promise<EmailAnalytics> {
+  try {
+    const safeLimit = Math.min(Math.max(limit, 1), MAX_ANALYTICS_EMAILS);
+    const cacheKey = createAnalyticsCacheKey(userKey, safeLimit);
+
+    if (!options.forceRefresh) {
+      const cached = getValidCachedAnalytics(cacheKey);
+
+      if (cached) {
+        return cached;
       }
-
-      const messageResponse = await gmail.users.messages.get({
-        userId: "me",
-        id: messageRef.id,
-        format: "full",
-        metadataHeaders: ["From", "Subject", "Date"],
-      });
-
-      const message = messageResponse.data;
-      const headers = message.payload?.headers;
-
-      const sender = getHeader(headers, "From") || "Unknown sender";
-      const subject = getHeader(headers, "Subject") || "(No subject)";
-      const date = getHeader(headers, "Date") || "";
-      const timestamp = getMessageTimestamp(message);
-      const labelIds = message.labelIds ?? [];
-      const attachmentInfo = extractAttachmentInfo(message.payload);
-
-      return {
-        id: messageRef.id,
-        sender,
-        senderName: parseSenderName(sender),
-        subject,
-        date,
-        timestamp,
-        labelIds,
-        hasAttachments: attachmentInfo.count > 0,
-        attachmentCount: attachmentInfo.count,
-        largestAttachmentSize: attachmentInfo.largestSize,
-      };
-    })
-  );
-
-  return settledMessages
-    .filter(
-      (result): result is PromiseFulfilledResult<AnalyticsEmail> =>
-        result.status === "fulfilled"
-    )
-    .map((result) => result.value);
-}
-
-export function getOverviewStats(emails: AnalyticsEmail[]): OverviewStats {
-  return {
-    totalEmails: emails.length,
-    unreadEmails: emails.filter((email) => email.labelIds.includes("UNREAD"))
-      .length,
-    emailsWithAttachments: emails.filter((email) => email.hasAttachments)
-      .length,
-    emailsOlderThanOneYear: emails.filter((email) =>
-      isOlderThan(email.timestamp, 365)
-    ).length,
-  };
-}
-
-export function getTopSenders(
-  emails: AnalyticsEmail[],
-  limit: number = 10
-): SenderStat[] {
-  const senderCounts = new Map<string, number>();
-
-  for (const email of emails) {
-    senderCounts.set(
-      email.senderName,
-      (senderCounts.get(email.senderName) ?? 0) + 1
-    );
-  }
-
-  return Array.from(senderCounts.entries())
-    .map(([sender, count]) => ({
-      sender,
-      count,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
-}
-
-export function getAttachmentStats(
-  emails: AnalyticsEmail[]
-): AttachmentStats {
-  return {
-    emailsWithAttachments: emails.filter((email) => email.hasAttachments)
-      .length,
-    totalAttachments: emails.reduce(
-      (total, email) => total + email.attachmentCount,
-      0
-    ),
-    largestAttachmentSize: emails.reduce(
-      (largest, email) => Math.max(largest, email.largestAttachmentSize),
-      0
-    ),
-  };
-}
-
-export function getCleanupCandidates(
-  emails: AnalyticsEmail[]
-): CleanupCandidate[] {
-  const linkedInOlderThan90Days = emails.filter(
-    (email) => isLinkedInEmail(email) && isOlderThan(email.timestamp, 90)
-  ).length;
-
-  const promotionsOlderThan180Days = emails.filter(
-    (email) => isPromotionalEmail(email) && isOlderThan(email.timestamp, 180)
-  ).length;
-
-  const unreadOlderThanTwoYears = emails.filter(
-    (email) =>
-      email.labelIds.includes("UNREAD") && isOlderThan(email.timestamp, 730)
-  ).length;
-
-  const largeAttachmentEmails = emails.filter(
-    (email) => email.largestAttachmentSize >= 10 * 1024 * 1024
-  ).length;
-
-  const candidates: CleanupCandidate[] = [];
-
-  if (linkedInOlderThan90Days > 0) {
-    candidates.push({
-      title: "LinkedIn Emails",
-      count: linkedInOlderThan90Days,
-      recommendation: "Archive Candidate",
-    });
-  }
-
-  if (promotionsOlderThan180Days > 0) {
-    candidates.push({
-      title: "Promotions > 180 Days",
-      count: promotionsOlderThan180Days,
-      recommendation: "Delete Candidate",
-    });
-  }
-
-  if (unreadOlderThanTwoYears > 0) {
-    candidates.push({
-      title: "Unread Emails > 2 Years",
-      count: unreadOlderThanTwoYears,
-      recommendation: "Review Candidate",
-    });
-  }
-
-  if (largeAttachmentEmails > 0) {
-    candidates.push({
-      title: "Large Attachment Emails",
-      count: largeAttachmentEmails,
-      recommendation: "Review Candidate",
-    });
-  }
-
-  return candidates;
-}
-
-export const getEmailAnalytics = cache(
-  async (
-    accessToken: string,
-    limit: number = MAX_ANALYTICS_EMAILS
-  ): Promise<EmailAnalytics> => {
-    try {
-      const safeLimit = Math.min(Math.max(limit, 1), MAX_ANALYTICS_EMAILS);
-      const emails = await fetchLatestAnalyticsEmails(accessToken, safeLimit);
-
-      return {
-        overview: getOverviewStats(emails),
-        topSenders: getTopSenders(emails, 10),
-        attachmentStats: getAttachmentStats(emails),
-        cleanupCandidates: getCleanupCandidates(emails),
-        analyzedEmailCount: emails.length,
-        maxAnalyzed: safeLimit,
-      };
-    } catch (error) {
-      throw new Error(getGmailErrorMessage(error));
     }
+
+      const [{ accumulator, scanComplete }, attachmentStats] =
+        await Promise.all([
+          aggregateEmailMetadata(accessToken, safeLimit),
+          aggregateAttachmentMetadata(accessToken, safeLimit),
+        ]);
+
+      const generatedAt = Date.now();
+      const result: EmailAnalytics = {
+        inboxHealth: getInboxHealth(accumulator, attachmentStats),
+        categoryBreakdown: getCategoryBreakdown(accumulator),
+        ageDistribution: getAgeDistribution(accumulator),
+        senderInsights: getSenderInsights(accumulator),
+        attachmentStats,
+        activityTrends: getActivityTrends(accumulator),
+        newsletterInsights: getNewsletterInsights(accumulator),
+        scannedEmailCount: accumulator.totalScanned,
+        maxScanned: safeLimit,
+        scanComplete,
+        generatedAt: new Date(generatedAt).toISOString(),
+        cached: false,
+      };
+
+    analyticsCache.set(cacheKey, {
+      result,
+      generatedAt,
+      analyzedEmailCount: result.scannedEmailCount,
+    });
+
+    return result;
+  } catch (error) {
+    throw new Error(getGmailErrorMessage(error));
   }
-);
+}
