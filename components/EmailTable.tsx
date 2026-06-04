@@ -2,18 +2,35 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ExportSelectedButton } from "@/components/ExportSelectedButton";
 import type { Email, EmailActionResult } from "@/types/email";
 
 type EmailTableProps = {
   emails: Email[];
   onDeleteSelected: (ids: string[]) => Promise<EmailActionResult>;
   onArchiveSelected: (ids: string[]) => Promise<EmailActionResult>;
+  heading?: string;
+  description?: string;
+  onViewEmail?: (id: string) => void;
+  onAnalyzeResults?: () => void;
+  onLoadMore?: () => Promise<void>;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  showExportSelected?: boolean;
 };
 
 export function EmailTable({
   emails,
   onDeleteSelected,
   onArchiveSelected,
+  heading,
+  description,
+  onViewEmail,
+  onAnalyzeResults,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
+  showExportSelected = false,
 }: EmailTableProps) {
   const router = useRouter();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -114,18 +131,21 @@ export function EmailTable({
     });
   }
 
-  if (emails.length === 0) {
-    return (
-      <div className="p-6">
-        <p className="text-sm text-gray-600">
-          No emails found in your inbox.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div>
+      {heading || description ? (
+        <div className="border-b px-6 py-4">
+          {heading ? (
+            <h2 className="text-lg font-semibold text-gray-900">
+              {heading}
+            </h2>
+          ) : null}
+          {description ? (
+            <p className="mt-1 text-sm text-gray-600">{description}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-3 border-b bg-gray-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-gray-700">
           Selected:{" "}
@@ -134,7 +154,18 @@ export function EmailTable({
           </span>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {onAnalyzeResults ? (
+            <button
+              type="button"
+              onClick={onAnalyzeResults}
+              disabled={emails.length === 0}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+            >
+              Analyze Results
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={handleDeleteSelected}
@@ -152,6 +183,10 @@ export function EmailTable({
           >
             {isPending ? "Working..." : "Archive Selected"}
           </button>
+
+          {showExportSelected ? (
+            <ExportSelectedButton selectedMessageIds={selectedIds} />
+          ) : null}
         </div>
       </div>
 
@@ -167,6 +202,13 @@ export function EmailTable({
         </div>
       ) : null}
 
+      {emails.length === 0 ? (
+        <div className="p-6">
+          <p className="text-sm text-gray-600">
+            No emails found in your inbox.
+          </p>
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -190,6 +232,11 @@ export function EmailTable({
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
                 Date
               </th>
+              {onViewEmail ? (
+                <th className="w-20 px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  Action
+                </th>
+              ) : null}
             </tr>
           </thead>
 
@@ -220,12 +267,39 @@ export function EmailTable({
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {email.date}
                   </td>
+                  {onViewEmail ? (
+                    <td className="px-6 py-4 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => onViewEmail(email.id)}
+                        className="font-medium text-blue-600 hover:text-blue-700"
+                      >
+                        View
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      )}
+
+      {onLoadMore ? (
+        <div className="border-t px-6 py-4">
+          <button
+            type="button"
+            onClick={() => {
+              void onLoadMore();
+            }}
+            disabled={!hasMore || isLoadingMore}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoadingMore ? "Loading..." : "Load More"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

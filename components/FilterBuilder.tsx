@@ -31,9 +31,21 @@ type FilterBuilderProps = {
     filter: EmailFilter,
     emailIds: string[]
   ) => Promise<FilterActionResult>;
+  renderPreview?: boolean;
+  onPreviewResult?: (
+    data: PreviewData,
+    filter: EmailFilter,
+    message?: string
+  ) => void;
+  onClearResults?: () => void;
 };
 
-export function FilterBuilder({ onPreview }: FilterBuilderProps) {
+export function FilterBuilder({
+  onPreview,
+  renderPreview = true,
+  onPreviewResult,
+  onClearResults,
+}: FilterBuilderProps) {
   const [sender, setSender] = useState("");
   const [subject, setSubject] = useState("");
   const [olderThanDays, setOlderThanDays] = useState("");
@@ -125,6 +137,7 @@ export function FilterBuilder({ onPreview }: FilterBuilderProps) {
       setPreview(result.data);
       setPreviewFilter(filter);
       setMessage(result.message ?? null);
+      onPreviewResult?.(result.data, filter, result.message);
     });
   }
 
@@ -150,6 +163,7 @@ export function FilterBuilder({ onPreview }: FilterBuilderProps) {
     setOlderThanDays("");
     setHasAttachment(false);
     resetPreviewState();
+    onClearResults?.();
   }
 
   return (
@@ -276,7 +290,7 @@ export function FilterBuilder({ onPreview }: FilterBuilderProps) {
         </div>
       ) : null}
 
-      {preview ? (
+      {renderPreview && preview ? (
         <FilterPreview
           totalMatches={preview.totalMatches}
           emails={preview.emails}

@@ -107,6 +107,8 @@ export async function archiveFilterAction(
     await archiveEmails(currentSession.accessToken, emailIds);
 
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/search");
+    revalidatePath("/dashboard/inbox");
 
     const data = await searchEmails(currentSession.accessToken, filter, 50);
 
@@ -147,6 +149,8 @@ export async function deleteFilterAction(
     await deleteEmails(currentSession.accessToken, emailIds);
 
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/search");
+    revalidatePath("/dashboard/inbox");
 
     const data = await searchEmails(currentSession.accessToken, filter, 50);
 

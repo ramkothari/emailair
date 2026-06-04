@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { DashboardShell } from "./DashboardShell";
 
 export default async function DashboardLayout({
   children,
@@ -12,5 +13,9 @@ export default async function DashboardLayout({
     redirect("/");
   }
 
-  return children;
+  return (
+    <DashboardShell email={session.user.email}>
+      {children}
+    </DashboardShell>
+  );
 }

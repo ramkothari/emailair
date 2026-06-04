@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AIAnalysisCard } from "@/components/AIAnalysisCard";
 import type { Task } from "@/lib/tasks/task-types";
-import type { Email } from "@/lib/types";
+import type { Email } from "@/types/email";
 
 type RunTaskModalProps = {
   open: boolean;
@@ -39,6 +39,10 @@ export function RunTaskModal({
   }
 
   async function handleConfirm() {
+    if (!task) {
+      return;
+    }
+
     setError(null);
     setIsExecuting(true);
 

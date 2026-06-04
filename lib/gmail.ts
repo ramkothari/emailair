@@ -100,6 +100,76 @@ export async function getRecentEmails(
   }
 }
 
+export async function getRecentEmailsPage(
+  accessToken: string,
+  limit: number = 50,
+  pageToken?: string
+): Promise<{
+  emails: Email[];
+  nextPageToken?: string;
+}> {
+  try {
+    const auth = new google.auth.OAuth2();
+
+    auth.setCredentials({
+      access_token: accessToken,
+    });
+
+    const gmail = google.gmail({
+      version: "v1",
+      auth,
+    });
+
+    const listResponse = await gmail.users.messages.list({
+      userId: "me",
+      maxResults: limit,
+      labelIds: ["INBOX"],
+      pageToken,
+    });
+
+    const messages = listResponse.data.messages ?? [];
+
+    if (messages.length === 0) {
+      return {
+        emails: [],
+        nextPageToken: listResponse.data.nextPageToken ?? undefined,
+      };
+    }
+
+    const emails = await Promise.all(
+      messages.map(async (message): Promise<Email> => {
+        if (!message.id) {
+          throw new Error("Gmail message is missing an ID.");
+        }
+
+        const messageResponse = await gmail.users.messages.get({
+          userId: "me",
+          id: message.id,
+          format: "full",
+        });
+
+        const headers = messageResponse.data.payload?.headers;
+        const snippet = messageResponse.data.snippet ?? undefined;
+
+        return {
+          id: message.id,
+          sender: getHeader(headers, "From") || "Unknown sender",
+          subject: getHeader(headers, "Subject") || "(No subject)",
+          date: getHeader(headers, "Date") || "Unknown date",
+          snippet,
+        };
+      })
+    );
+
+    return {
+      emails,
+      nextPageToken: listResponse.data.nextPageToken ?? undefined,
+    };
+  } catch (error) {
+    throw new Error(getGmailErrorMessage(error));
+  }
+}
+
 export async function deleteEmails(
   accessToken: string,
   ids: string[]

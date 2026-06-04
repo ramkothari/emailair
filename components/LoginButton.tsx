@@ -7,7 +7,7 @@ export function LoginButton() {
         "use server";
 
         await signIn("google", {
-          redirectTo: "/dashboard"
+          redirectTo: "/dashboard/inbox"
         });
       }}
     >
