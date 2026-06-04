@@ -4,8 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import { loadInboxPageAction } from "@/app/actions/inbox-actions";
 import { EmailTable } from "@/components/EmailTable";
 import { EmailViewer } from "@/components/EmailViewer";
-import { FilterBuilder } from "@/components/FilterBuilder";
 import { InboxAIAnalysisModal } from "@/components/InboxAIAnalysisModal";
+import {
+  InboxSearchHeader,
+  type InboxSearchFormValues,
+} from "@/components/InboxSearchHeader";
 import type { Email, EmailActionResult } from "@/types/email";
 import type { EmailFilter } from "@/types/filter";
 
@@ -49,8 +52,6 @@ export function InboxWorkspace({
   initialNextPageToken,
   loadError = null,
   onPreview,
-  onArchive,
-  onDelete,
   onDeleteSelected,
   onArchiveSelected,
 }: InboxWorkspaceProps) {
@@ -63,6 +64,7 @@ export function InboxWorkspace({
   const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isExecutingAiAction, setIsExecutingAiAction] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
 
   const emailMetadata = useMemo(
@@ -94,6 +96,82 @@ export function InboxWorkspace({
     setMessage(null);
     setError(loadError);
     setIsAiOpen(false);
+  }
+
+  function buildFilterFromSearchValues(
+    values: InboxSearchFormValues
+  ): EmailFilter | null {
+    const filter: EmailFilter = {};
+    const trimmedQuery = values.query.trim();
+    const trimmedSender = values.sender.trim();
+    const trimmedSubject = values.subject.trim();
+    const trimmedOlderThanDays = values.olderThanDays.trim();
+
+    if (trimmedSender) {
+      filter.sender = trimmedSender;
+    }
+
+    if (trimmedSubject || trimmedQuery) {
+      filter.subject = trimmedSubject || trimmedQuery;
+    }
+
+    if (trimmedOlderThanDays) {
+      const parsedDays = Number(trimmedOlderThanDays);
+
+      if (
+        !Number.isFinite(parsedDays) ||
+        !Number.isInteger(parsedDays) ||
+        parsedDays <= 0
+      ) {
+        setError("Older Than Days must be a positive whole number.");
+        return null;
+      }
+
+      filter.olderThanDays = parsedDays;
+    }
+
+    if (values.hasAttachment) {
+      filter.hasAttachment = true;
+    }
+
+    const hasAnyFilter =
+      Boolean(filter.sender) ||
+      Boolean(filter.subject) ||
+      Boolean(filter.olderThanDays) ||
+      Boolean(filter.hasAttachment);
+
+    if (!hasAnyFilter) {
+      setError("Add at least one search term or filter before searching.");
+      return null;
+    }
+
+    return filter;
+  }
+
+  async function handleCompactSearch(values: InboxSearchFormValues) {
+    setError(null);
+    setMessage(null);
+
+    const filter = buildFilterFromSearchValues(values);
+
+    if (!filter) {
+      return;
+    }
+
+    setIsSearching(true);
+
+    try {
+      const result = await onPreview(filter);
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      handleSearchResults(result.data, filter, result.message);
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   async function handleLoadMore() {
@@ -153,13 +231,11 @@ export function InboxWorkspace({
 
   return (
     <>
-      <FilterBuilder
-        onPreview={onPreview}
-        onArchive={onArchive}
-        onDelete={onDelete}
-        renderPreview={false}
-        onPreviewResult={handleSearchResults}
-        onClearResults={handleClearSearch}
+      <InboxSearchHeader
+        isSearching={isSearching}
+        resultCount={emails.length}
+        onSearch={handleCompactSearch}
+        onReset={handleClearSearch}
       />
 
       {message ? (
