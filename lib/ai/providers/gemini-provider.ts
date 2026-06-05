@@ -49,7 +49,7 @@ export class GeminiProvider extends BaseProvider {
 
   async verify(): Promise<boolean> {
     try {
-      const url = `${this.endpoint}/gemini-pro:generateContent?key=${this.apiKey}`;
+      const url = `${this.endpoint}/${this.model}:generateContent?key=${this.apiKey}`;
 
       const response = await fetch(url, {
         method: "POST",

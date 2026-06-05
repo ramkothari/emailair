@@ -25,6 +25,8 @@ const RATE_LIMIT_MAX = 20;
 export async function analyzeEmails(
   emailBodies: string[]
 ): Promise<EmailAnalysis> {
+  const startedAt = Date.now();
+
   if (emailBodies.length === 0) {
     throw new Error("No emails provided for analysis");
   }
@@ -34,6 +36,10 @@ export async function analyzeEmails(
   const cached = analysisCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    console.info("[ai:analyzeEmails] cache hit", {
+      emailCount: emailBodies.length,
+      elapsedMs: Date.now() - startedAt,
+    });
     return cached.result;
   }
 
@@ -57,7 +63,33 @@ export async function analyzeEmails(
 
   // 4. Call provider
   const prompt = createAnalysisPrompt(emailBodies);
-  const rawText = await provider.complete(prompt);
+  console.info("[ai:analyzeEmails] provider request", {
+    provider: provider.getName(),
+    emailCount: emailBodies.length,
+    promptChars: prompt.length,
+    promptBytes: Buffer.byteLength(prompt, "utf8"),
+  });
+
+  let rawText: string;
+
+  try {
+    rawText = await provider.complete(prompt);
+  } catch (error) {
+    console.error("[ai:analyzeEmails] provider failed", {
+      provider: provider.getName(),
+      emailCount: emailBodies.length,
+      promptChars: prompt.length,
+      elapsedMs: Date.now() - startedAt,
+      error,
+    });
+    throw error;
+  }
+
+  console.info("[ai:analyzeEmails] provider response", {
+    provider: provider.getName(),
+    responseChars: rawText.length,
+    elapsedMs: Date.now() - startedAt,
+  });
 
   // 5. Parse and validate
   let data: unknown;
@@ -83,6 +115,10 @@ export async function analyzeEmails(
 
   // 6. Cache and return
   analysisCache.set(cacheKey, { result, timestamp: now });
+  console.info("[ai:analyzeEmails] success", {
+    emailCount: emailBodies.length,
+    elapsedMs: Date.now() - startedAt,
+  });
   return result;
 }
 

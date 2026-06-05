@@ -57,7 +57,7 @@ export function AIActionCard({
   );
 
   return (
-    <section className="rounded-lg border bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-base font-semibold text-gray-900">
@@ -77,7 +77,7 @@ export function AIActionCard({
 
       {/* Metrics Grid */}
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md bg-gray-50 p-3">
+        <div className="rounded-2xl bg-gray-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Total Emails Found
           </dt>
@@ -86,7 +86,7 @@ export function AIActionCard({
           </dd>
         </div>
 
-        <div className="rounded-md bg-gray-50 p-3">
+        <div className="rounded-2xl bg-gray-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Emails Analyzed
           </dt>
@@ -95,7 +95,7 @@ export function AIActionCard({
           </dd>
         </div>
 
-        <div className="rounded-md bg-gray-50 p-3">
+        <div className="rounded-2xl bg-gray-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Risk Score
           </dt>
@@ -104,7 +104,7 @@ export function AIActionCard({
           </dd>
         </div>
 
-        <div className="rounded-md bg-gray-50 p-3">
+        <div className="rounded-2xl bg-gray-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Analysis Time
           </dt>
@@ -162,7 +162,7 @@ export function AIActionCard({
         )}
 
         {/* Recommendation */}
-        <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3">
           <h4 className="text-sm font-medium text-blue-900">Recommendation</h4>
           <p className="mt-1 text-sm text-blue-800">{risk.recommendation}</p>
         </div>
@@ -173,7 +173,7 @@ export function AIActionCard({
           type="button"
           onClick={onArchiveSearchResults}
           disabled={isExecuting || totalEmailsFound === 0 || !onArchiveSearchResults}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Archive Results
         </button>
@@ -182,7 +182,7 @@ export function AIActionCard({
           type="button"
           onClick={onMoveSearchResultsToTrash}
           disabled={isExecuting || totalEmailsFound === 0 || !onMoveSearchResultsToTrash}
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Move Results To Trash
         </button>
@@ -191,7 +191,7 @@ export function AIActionCard({
           type="button"
           disabled
           title="Download execution is deferred."
-          className="rounded-md border px-4 py-2 text-sm font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl border px-3.5 py-1.5 text-sm font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Download Search Results
         </button>

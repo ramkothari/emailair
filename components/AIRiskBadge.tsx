@@ -25,9 +25,9 @@ function getRiskClasses(level: string): string {
 export function AIRiskBadge({ risk }: AIRiskBadgeProps) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-700">Risk:</span>
+      <span className="text-sm font-medium text-gray-700 dark:text-[#A1A1AA]">Risk:</span>
       <span
-        className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${getRiskClasses(
+        className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold dark:border-[#3F3F46] dark:bg-[#2A2A2E] dark:text-[#F5F5F5] ${getRiskClasses(
           risk.riskLevel
         )}`}
       >

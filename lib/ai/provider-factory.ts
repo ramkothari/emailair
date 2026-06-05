@@ -87,10 +87,16 @@ export class ProviderFactory {
   }
 
   private static getModel(provider: string): string {
+    const envModel = process.env[`${provider.toUpperCase()}_MODEL`];
+
+    if (envModel) {
+      return envModel;
+    }
+
     const models: Record<string, string> = {
       openai: "gpt-4-turbo",
       grok: "llama-3.3-70b-versatile",
-      gemini: "gemini-2.0-flash",
+      gemini: "gemini-2.5-flash-lite",
       deepseek: "deepseek-chat",
       claude: "claude-3-5-sonnet-20241022",
     };
@@ -116,5 +122,9 @@ export class ProviderFactory {
 
   static getCurrentProvider(): string {
     return (process.env.AI_PROVIDER || "openai").toLowerCase();
+  }
+
+  static getCurrentModel(): string {
+    return this.getModel(this.getCurrentProvider());
   }
 }

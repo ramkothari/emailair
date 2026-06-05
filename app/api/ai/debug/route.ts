@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { ProviderFactory } from "@/lib/ai/provider-factory";
 
 /**
@@ -9,11 +9,16 @@ import { ProviderFactory } from "@/lib/ai/provider-factory";
 export async function GET() {
   try {
     const provider = ProviderFactory.getCurrentProvider();
-    const apiKey = process.env.GROK_API_KEY || "NOT SET";
+    const providerEnv: Record<string, string> = {
+      openai: "OPENAI_API_KEY",
+      grok: "GROK_API_KEY",
+      gemini: "GEMINI_API_KEY",
+      deepseek: "DEEPSEEK_API_KEY",
+      claude: "CLAUDE_API_KEY",
+    };
 
-    // Mask the key for security
-    const maskedKey =
-      apiKey === "NOT SET" ? apiKey : apiKey.substring(0, 10) + "...";
+    const apiKeyEnvName = providerEnv[provider] ?? "UNKNOWN_API_KEY";
+    const apiKey = process.env[apiKeyEnvName];
 
     // Try to get provider instance
     const providerInstance = ProviderFactory.getProvider();
@@ -21,10 +26,10 @@ export async function GET() {
     return NextResponse.json({
       status: "ok",
       provider,
-      apiKeySet: apiKey !== "NOT SET",
-      apiKeyPreview: maskedKey,
+      apiKeyEnvName,
+      apiKeySet: Boolean(apiKey),
       providerName: providerInstance.getName?.() || "unknown",
-      model: "llama-3.3-70b-versatile",
+      model: ProviderFactory.getCurrentModel(),
       environment: {
         AI_PROVIDER: process.env.AI_PROVIDER,
         NODE_ENV: process.env.NODE_ENV,
