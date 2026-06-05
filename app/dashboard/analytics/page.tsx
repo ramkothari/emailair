@@ -62,7 +62,7 @@ export default async function DashboardAnalyticsPage({
   return (
     <section className="mb-8 space-y-6">
       {analyticsError ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-[#FB7185]">
           {analyticsError}
         </div>
       ) : analytics ? (
@@ -90,7 +90,7 @@ export default async function DashboardAnalyticsPage({
           <NewsletterInsights insights={analytics.newsletterInsights} />
         </>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#A1A1AA]">
           Analytics unavailable. Reconnect Gmail if this continues.
         </div>
       )}
