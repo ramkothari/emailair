@@ -239,18 +239,18 @@ export function InboxWorkspace({
       />
 
       {message ? (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-[#315341] dark:bg-[#1F2D26] dark:text-green-300">
           {message}
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300">
           {error}
         </div>
       ) : null}
 
-      <div className="rounded-lg bg-white shadow">
+      <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[#F3F3F3] shadow-sm dark:border-[#3F3F46] dark:bg-[#232326] dark:shadow-[0_18px_45px_rgba(0,0,0,0.18)]">
         <EmailTable
           emails={emails}
           onDeleteSelected={onDeleteSelected}

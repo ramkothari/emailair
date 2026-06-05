@@ -69,14 +69,20 @@ export function ExportSelectedButton({
         type="button"
         onClick={exportSelectedEmails}
         disabled={selectedMessageIds.length === 0 || exporting}
-        className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+          selectedMessageIds.length > 0
+            ? "border-[#22C55E]/40 bg-black/[0.03] text-[#16A34A] hover:bg-[#22C55E] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+            : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
+        }`}
       >
         {exporting
           ? "Exporting..."
           : `Export Selected (${selectedMessageIds.length})`}
       </button>
 
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-xs text-red-600 dark:text-red-300">{error}</p>
+      ) : null}
     </div>
   );
 }

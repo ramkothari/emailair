@@ -167,7 +167,7 @@ export function FilterBuilder({
   }
 
   return (
-    <section className="rounded-lg border bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border bg-white p-6 shadow-sm">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Filter Builder</h2>
         <p className="mt-1 text-sm text-gray-500">
@@ -193,7 +193,7 @@ export function FilterBuilder({
               resetPreviewState();
             }}
             placeholder="linkedin, amazon.com, john@example.com"
-            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
           <p className="mt-1 text-xs text-gray-500">
             Gmail will search sender addresses and display names
@@ -216,7 +216,7 @@ export function FilterBuilder({
               resetPreviewState();
             }}
             placeholder="invoice, receipt, password"
-            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
         </div>
 
@@ -238,7 +238,7 @@ export function FilterBuilder({
               resetPreviewState();
             }}
             placeholder="30"
-            className="mt-1 w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
         </div>
 
@@ -251,7 +251,7 @@ export function FilterBuilder({
                 setHasAttachment(event.target.checked);
                 resetPreviewState();
               }}
-              className="h-4 w-4 rounded border-gray-300"
+              className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30"
             />
             Has Attachment
           </label>
@@ -263,7 +263,7 @@ export function FilterBuilder({
           type="button"
           onClick={handlePreview}
           disabled={isPending}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Working..." : "Preview"}
         </button>
@@ -272,20 +272,20 @@ export function FilterBuilder({
           type="button"
           onClick={handleClear}
           disabled={isPending}
-          className="rounded-md border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl border px-3.5 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear
         </button>
       </div>
 
       {error ? (
-        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
       {message ? (
-        <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
           {message}
         </div>
       ) : null}

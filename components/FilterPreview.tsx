@@ -284,7 +284,7 @@ export function FilterPreview({
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border bg-white p-6">
+      <div className="rounded-2xl border bg-white p-6">
         <p className="text-sm text-gray-600">Loading preview results...</p>
       </div>
     );
@@ -292,7 +292,7 @@ export function FilterPreview({
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6">
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
         <p className="text-sm font-medium text-red-700">Failed to load preview.</p>
         <p className="mt-1 text-sm text-red-600">{error}</p>
       </div>
@@ -301,7 +301,7 @@ export function FilterPreview({
 
   if (!hasEmails) {
     return (
-      <div className="rounded-lg border bg-white p-6">
+      <div className="rounded-2xl border bg-white p-6">
         <p className="text-sm text-gray-600">No matching emails found.</p>
       </div>
     );
@@ -311,7 +311,7 @@ export function FilterPreview({
     executionTarget?.action ?? resultTarget?.action ?? "archive";
 
   return (
-    <div className="rounded-lg border bg-white">
+    <div className="rounded-2xl border bg-white">
       <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-gray-900">
@@ -327,7 +327,7 @@ export function FilterPreview({
             type="button"
             onClick={selectAllEmails}
             disabled={isExecutingAction || allSelected}
-            className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-2xl border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Select All
           </button>
@@ -336,7 +336,7 @@ export function FilterPreview({
             type="button"
             onClick={clearSelection}
             disabled={isExecutingAction || selectedCount === 0}
-            className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-2xl border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Clear Selection
           </button>
@@ -345,7 +345,7 @@ export function FilterPreview({
             type="button"
             onClick={() => requestExecution("archive", Array.from(selectedIds), riskLevel)}
             disabled={isExecutingAction || selectedCount === 0}
-            className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Archive Selected
           </button>
@@ -354,7 +354,7 @@ export function FilterPreview({
             type="button"
             onClick={() => requestExecution("delete", Array.from(selectedIds), riskLevel)}
             disabled={isExecutingAction || selectedCount === 0}
-            className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-2xl bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Move Selected To Trash
           </button>
@@ -403,7 +403,7 @@ export function FilterPreview({
                   }}
                   disabled={isExecutingAction}
                   aria-label="Select all preview emails"
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
@@ -429,7 +429,9 @@ export function FilterPreview({
                 <tr
                   key={email.id}
                   className={`border-b transition-colors ${
-                    isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                    isSelected
+                      ? "border-[#D97706]/35 bg-[#D97706]/10 shadow-[inset_3px_0_0_#D97706]"
+                      : "hover:bg-gray-50"
                   }`}
                 >
                   <td className="px-4 py-3">
@@ -439,11 +441,11 @@ export function FilterPreview({
                       onChange={() => toggleEmailSelection(email.id)}
                       disabled={isExecutingAction}
                       aria-label={`Select email from ${email.sender}`}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </td>
 
-                  <td className="max-w-xs px-4 py-3 text-sm text-gray-900">
+                  <td className="max-w-xs px-4 py-3 text-sm font-medium text-[#D97706]">
                     <div className="truncate" title={email.sender}>
                       {email.sender || "Unknown sender"}
                     </div>
@@ -468,7 +470,7 @@ export function FilterPreview({
                     <button
                       type="button"
                       onClick={() => setViewingEmailId(email.id)}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                      className="rounded-xl border border-[rgba(0,0,0,0.08)] px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3]"
                     >
                       View
                     </button>

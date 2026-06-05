@@ -211,35 +211,41 @@ export function EmailTable({
   }
 
   return (
-    <div>
+    <div className="dark:text-[#F5F5F5]">
       {heading || description ? (
-        <div className="border-b px-6 py-4">
+        <div className="border-b border-[rgba(0,0,0,0.08)] px-6 py-4 dark:border-[#3F3F46]">
           {heading ? (
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-base font-semibold tracking-tight text-gray-900 dark:text-[#F5F5F5]">
               {heading}
             </h2>
           ) : null}
           {description ? (
-            <p className="mt-1 text-sm text-gray-600">{description}</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-[#A1A1AA]">
+              {description}
+            </p>
           ) : null}
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3 border-b bg-gray-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm text-gray-700">
+      <div className="flex flex-col gap-3 border-b border-[rgba(0,0,0,0.08)] bg-white px-6 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-[#3F3F46] dark:bg-[#2A2A2E]">
+        <div className="text-sm text-gray-700 dark:text-[#A1A1AA]">
           Selected:{" "}
-          <span className="font-semibold text-gray-900">
+          <span className="font-semibold text-gray-900 dark:text-[#F5F5F5]">
             {selectedCount}
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           {onAnalyzeResults ? (
             <button
               type="button"
               onClick={onAnalyzeResults}
               disabled={emails.length === 0}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+              className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                emails.length > 0
+                  ? "border-[#60A5FA]/40 bg-black/[0.03] text-[#2563EB] hover:bg-[#60A5FA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+                  : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
+              }`}
             >
               Analyze Results
             </button>
@@ -249,7 +255,11 @@ export function EmailTable({
             type="button"
             onClick={handleDeleteSelected}
             disabled={!hasSelection || isPending}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
+            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+              hasSelection
+                ? "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+                : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
+            }`}
           >
             {isPending ? "Working..." : "Delete Selected"}
           </button>
@@ -258,7 +268,11 @@ export function EmailTable({
             type="button"
             onClick={handleArchiveSelected}
             disabled={!hasSelection || isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+              hasSelection
+                ? "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+                : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
+            }`}
           >
             {isPending ? "Working..." : "Archive Selected"}
           </button>
@@ -273,8 +287,8 @@ export function EmailTable({
         <div
           className={`border-b px-6 py-3 text-sm ${
             message.success
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-red-200 bg-red-50 text-red-700"
+              ? "border-green-200 bg-green-50 text-green-700 dark:border-[#315341] dark:bg-[#1F2D26] dark:text-green-300"
+              : "border-red-200 bg-red-50 text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300"
           }`}
         >
           {message.message}
@@ -283,7 +297,7 @@ export function EmailTable({
 
       {emails.length === 0 ? (
         <div className="p-6">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 dark:text-[#A1A1AA]">
             No emails found in your inbox.
           </p>
         </div>
@@ -291,7 +305,7 @@ export function EmailTable({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b bg-white">
+            <tr className="border-b border-[rgba(0,0,0,0.08)] bg-white dark:border-[#3F3F46] dark:bg-[#232326]">
               <th className="w-12 px-6 py-3 text-left">
                 <input
                   ref={selectAllRef}
@@ -299,20 +313,20 @@ export function EmailTable({
                   checked={allSelected}
                   onChange={toggleAllEmails}
                   aria-label="Select all emails"
-                  className="h-4 w-4 rounded border-gray-300"
+                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
                 />
               </th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-900 dark:text-[#71717A]">
                 From
               </th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-900 dark:text-[#71717A]">
                 Subject
               </th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-900 dark:text-[#71717A]">
                 Date
               </th>
               {onViewEmail ? (
-                <th className="w-20 px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                <th className="w-20 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-900 dark:text-[#71717A]">
                   Action
                 </th>
               ) : null}
@@ -326,7 +340,11 @@ export function EmailTable({
               return (
                 <tr
                   key={email.id}
-                  className="border-b hover:bg-gray-50"
+                  className={`border-b border-[rgba(0,0,0,0.08)] transition dark:border-[#3F3F46] ${
+                    checked
+                      ? "border-[#D97706]/35 bg-[#D97706]/10 shadow-[inset_3px_0_0_#D97706] dark:border-[#D97706]/35 dark:bg-[#D97706]/[0.12]"
+                      : "hover:bg-white dark:hover:bg-[#2A2A2E]"
+                  }`}
                 >
                   <td className="px-6 py-4">
                     <input
@@ -334,16 +352,16 @@ export function EmailTable({
                       checked={checked}
                       onChange={() => toggleEmail(email.id)}
                       aria-label={`Select email from ${email.sender}`}
-                      className="h-4 w-4 rounded border-gray-300"
+                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
                     />
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="max-w-[240px] truncate px-6 py-4 text-sm font-medium text-[#D97706] dark:text-[#D97706]">
                     {email.sender}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="max-w-[360px] truncate px-6 py-4 text-sm text-gray-900 dark:text-[#F5F5F5]">
                     {email.subject}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-xs leading-5 text-gray-600 dark:text-[#A1A1AA]">
                     {email.date}
                   </td>
                   {onViewEmail ? (
@@ -351,7 +369,7 @@ export function EmailTable({
                       <button
                         type="button"
                         onClick={() => onViewEmail(email.id)}
-                        className="font-medium text-blue-600 hover:text-blue-700"
+                        className="rounded-xl border border-[rgba(0,0,0,0.08)] px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3] dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#18181B] dark:hover:text-[#F5F5F5]"
                       >
                         View
                       </button>
@@ -366,14 +384,14 @@ export function EmailTable({
       )}
 
       {onLoadMore ? (
-        <div className="border-t px-6 py-4">
+        <div className="border-t border-[rgba(0,0,0,0.08)] px-6 py-4 dark:border-[#3F3F46]">
           <button
             type="button"
             onClick={() => {
               void onLoadMore();
             }}
             disabled={!hasMore || isLoadingMore}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#F5F5F5] dark:hover:bg-[#2A2A2E]"
           >
             {isLoadingMore ? "Loading..." : "Load More"}
           </button>
@@ -381,7 +399,7 @@ export function EmailTable({
       ) : null}
 
       {bulkActionProgress ? (
-        <div className="border-b bg-blue-50 px-6 py-3 text-sm text-blue-700">
+        <div className="border-b bg-blue-50 px-6 py-3 text-sm text-blue-700 dark:border-[#3F3F46] dark:bg-[#202834] dark:text-[#A1C0E4]">
           Completed {bulkActionProgress.completed.toLocaleString()} of{" "}
           {bulkActionProgress.total.toLocaleString()} emails.
         </div>
