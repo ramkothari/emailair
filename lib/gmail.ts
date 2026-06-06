@@ -5,6 +5,22 @@ import type { EmailFilter } from "@/types/filter";
 
 const DEFAULT_GMAIL_BULK_BATCH_SIZE = 25;
 const DEFAULT_GMAIL_BULK_BATCH_DELAY_MS = 350;
+const DEFAULT_GMAIL_METADATA_BATCH_SIZE = 15;
+const DEFAULT_GMAIL_METADATA_BATCH_DELAY_MS = 200;
+const DEFAULT_GMAIL_DELETE_BATCH_SIZE = 10;
+const DEFAULT_GMAIL_DELETE_BATCH_DELAY_MS = 200;
+const DEFAULT_GMAIL_RETRY_ATTEMPTS = 3;
+const DEFAULT_GMAIL_RETRY_BASE_DELAY_MS = 300;
+const DEFAULT_GMAIL_RETRY_MAX_DELAY_MS = 2500;
+
+const TRANSIENT_GMAIL_REASONS = new Set([
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+  "backendError",
+  "internalError",
+]);
+
+const TRANSIENT_GMAIL_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 export type GmailMessageSnapshot = {
   emailId: string;
@@ -34,6 +50,118 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+type GmailDiagnostic = {
+  operation: string;
+  status?: number;
+  reason?: string;
+  message: string;
+  attempt?: number;
+  maxAttempts?: number;
+  emailCount?: number;
+  batchIndex?: number;
+};
+
+function getGmailDiagnostic(error: unknown, operation: string): GmailDiagnostic {
+  const maybeGoogleError = error as {
+    code?: number;
+    status?: number;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        error?: string | { message?: string; errors?: Array<{ reason?: string; message?: string }> };
+        error_description?: string;
+        message?: string;
+      };
+    };
+    errors?: Array<{ reason?: string; message?: string }>;
+  };
+  const responseError = maybeGoogleError.response?.data?.error;
+  const nestedError =
+    typeof responseError === "object" ? responseError.errors?.[0] : undefined;
+  const directError = maybeGoogleError.errors?.[0];
+  const reason = nestedError?.reason ?? directError?.reason;
+  const message =
+    nestedError?.message ??
+    directError?.message ??
+    (typeof responseError === "string" ? responseError : responseError?.message) ??
+    maybeGoogleError.response?.data?.message ??
+    maybeGoogleError.response?.data?.error_description ??
+    maybeGoogleError.message ??
+    "Unknown Gmail API error.";
+  const status =
+    maybeGoogleError.response?.status ??
+    maybeGoogleError.code ??
+    maybeGoogleError.status;
+
+  return {
+    operation,
+    status,
+    reason,
+    message,
+  };
+}
+
+function isTransientGmailError(error: unknown): boolean {
+  const diagnostic = getGmailDiagnostic(error, "gmail");
+
+  return (
+    (typeof diagnostic.status === "number" &&
+      TRANSIENT_GMAIL_STATUSES.has(diagnostic.status)) ||
+    (typeof diagnostic.reason === "string" &&
+      TRANSIENT_GMAIL_REASONS.has(diagnostic.reason))
+  );
+}
+
+function getRetryDelayMs(attempt: number): number {
+  const exponentialDelay = Math.min(
+    DEFAULT_GMAIL_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+    DEFAULT_GMAIL_RETRY_MAX_DELAY_MS
+  );
+  const jitter = Math.floor(Math.random() * DEFAULT_GMAIL_RETRY_BASE_DELAY_MS);
+
+  return exponentialDelay + jitter;
+}
+
+function logGmailDiagnostic(diagnostic: GmailDiagnostic): void {
+  console.error("[gmail]", diagnostic);
+}
+
+async function withGmailRetry<T>(
+  operation: string,
+  execute: () => Promise<T>,
+  context: {
+    emailCount?: number;
+    batchIndex?: number;
+  } = {}
+): Promise<T> {
+  for (let attempt = 1; attempt <= DEFAULT_GMAIL_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      const diagnostic = {
+        ...getGmailDiagnostic(error, operation),
+        attempt,
+        maxAttempts: DEFAULT_GMAIL_RETRY_ATTEMPTS,
+        ...context,
+      };
+
+      logGmailDiagnostic(diagnostic);
+
+      if (
+        attempt >= DEFAULT_GMAIL_RETRY_ATTEMPTS ||
+        !isTransientGmailError(error)
+      ) {
+        throw error;
+      }
+
+      await sleep(getRetryDelayMs(attempt));
+    }
+  }
+
+  throw new Error(`${operation} failed.`);
+}
+
 function createBatches<T>(items: T[], batchSize: number): T[][] {
   const batches: T[][] = [];
 
@@ -46,27 +174,57 @@ function createBatches<T>(items: T[], batchSize: number): T[][] {
 
 async function processGmailIdsInBatches(
   ids: string[],
-  operation: (id: string) => Promise<unknown>
+  operation: (id: string) => Promise<unknown>,
+  options?: {
+    operationName?: string;
+    batchSize?: number;
+    batchDelayMs?: number;
+  }
 ): Promise<void> {
-  const batchSize = getPositiveIntegerEnv(
+  const batchSize = options?.batchSize ?? getPositiveIntegerEnv(
     "GMAIL_BULK_BATCH_SIZE",
     DEFAULT_GMAIL_BULK_BATCH_SIZE
   );
-  const batchDelayMs = getPositiveIntegerEnv(
+  const batchDelayMs = options?.batchDelayMs ?? getPositiveIntegerEnv(
     "GMAIL_BULK_BATCH_DELAY_MS",
     DEFAULT_GMAIL_BULK_BATCH_DELAY_MS
   );
+  const operationName = options?.operationName ?? "gmail.bulk";
   const batches = createBatches(ids, batchSize);
   const failedIds: string[] = [];
+  const startedAt = Date.now();
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
-    const results = await Promise.allSettled(batch.map((id) => operation(id)));
+    const batchStartedAt = Date.now();
+    const results = await Promise.allSettled(
+      batch.map((id) =>
+        withGmailRetry(operationName, () => operation(id), {
+          batchIndex: batchIndex + 1,
+          emailCount: batch.length,
+        })
+      )
+    );
 
     results.forEach((result, resultIndex) => {
       if (result.status === "rejected") {
         failedIds.push(batch[resultIndex]);
+        logGmailDiagnostic({
+          ...getGmailDiagnostic(result.reason, operationName),
+          batchIndex: batchIndex + 1,
+          emailCount: batch.length,
+        });
       }
+    });
+
+    console.info("[gmail]", {
+      operation: operationName,
+      batchIndex: batchIndex + 1,
+      totalBatches: batches.length,
+      emailCount: batch.length,
+      durationMs: Date.now() - batchStartedAt,
+      failedCount: results.filter((result) => result.status === "rejected")
+        .length,
     });
 
     if (batchIndex < batches.length - 1) {
@@ -79,6 +237,13 @@ async function processGmailIdsInBatches(
       `Gmail API failed for ${failedIds.length} of ${ids.length} emails.`
     );
   }
+
+  console.info("[gmail]", {
+    operation: operationName,
+    emailCount: ids.length,
+    batchCount: batches.length,
+    durationMs: Date.now() - startedAt,
+  });
 }
 
 function getHeader(
@@ -267,11 +432,24 @@ export async function deleteEmails(
     auth,
   });
 
-  await processGmailIdsInBatches(ids, (id) =>
-    gmail.users.messages.trash({
-      userId: "me",
-      id,
-    })
+  await processGmailIdsInBatches(
+    ids,
+    (id) =>
+      gmail.users.messages.trash({
+        userId: "me",
+        id,
+      }),
+    {
+      operationName: "gmail.messages.trash",
+      batchSize: getPositiveIntegerEnv(
+        "GMAIL_DELETE_BATCH_SIZE",
+        DEFAULT_GMAIL_DELETE_BATCH_SIZE
+      ),
+      batchDelayMs: getPositiveIntegerEnv(
+        "GMAIL_DELETE_BATCH_DELAY_MS",
+        DEFAULT_GMAIL_DELETE_BATCH_DELAY_MS
+      ),
+    }
   );
 }
 
@@ -294,15 +472,56 @@ export async function archiveEmails(
     auth,
   });
 
-  await processGmailIdsInBatches(ids, (id) =>
-    gmail.users.messages.modify({
-      userId: "me",
-      id,
-      requestBody: {
-        removeLabelIds: ["INBOX"],
-      },
-    })
+  const batchSize = getPositiveIntegerEnv(
+    "GMAIL_ARCHIVE_BATCH_SIZE",
+    DEFAULT_GMAIL_BULK_BATCH_SIZE
   );
+  const batchDelayMs = getPositiveIntegerEnv(
+    "GMAIL_ARCHIVE_BATCH_DELAY_MS",
+    DEFAULT_GMAIL_BULK_BATCH_DELAY_MS
+  );
+  const batches = createBatches(ids, batchSize);
+  const startedAt = Date.now();
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
+    const batchStartedAt = Date.now();
+
+    await withGmailRetry(
+      "gmail.messages.batchModify.archive",
+      () =>
+        gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: batch,
+            removeLabelIds: ["INBOX"],
+          },
+        }),
+      {
+        batchIndex: batchIndex + 1,
+        emailCount: batch.length,
+      }
+    );
+
+    console.info("[gmail]", {
+      operation: "gmail.messages.batchModify.archive",
+      batchIndex: batchIndex + 1,
+      totalBatches: batches.length,
+      emailCount: batch.length,
+      durationMs: Date.now() - batchStartedAt,
+    });
+
+    if (batchIndex < batches.length - 1) {
+      await sleep(batchDelayMs);
+    }
+  }
+
+  console.info("[gmail]", {
+    operation: "gmail.messages.batchModify.archive",
+    emailCount: ids.length,
+    batchCount: batches.length,
+    durationMs: Date.now() - startedAt,
+  });
 }
 
 function formatGmailSearchValue(value: string): string {
@@ -461,19 +680,37 @@ export async function getEmailsMetadataByIds(
   }
 
   const gmail = getGmailClient(accessToken);
-  const batches = createBatches(normalizedIds, DEFAULT_GMAIL_BULK_BATCH_SIZE);
+  const batchSize = getPositiveIntegerEnv(
+    "GMAIL_METADATA_BATCH_SIZE",
+    DEFAULT_GMAIL_METADATA_BATCH_SIZE
+  );
+  const batchDelayMs = getPositiveIntegerEnv(
+    "GMAIL_METADATA_BATCH_DELAY_MS",
+    DEFAULT_GMAIL_METADATA_BATCH_DELAY_MS
+  );
+  const batches = createBatches(normalizedIds, batchSize);
   const snapshots: GmailMessageSnapshot[] = [];
+  const startedAt = Date.now();
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
     const batch = batches[batchIndex];
+    const batchStartedAt = Date.now();
     const settledMessages = await Promise.allSettled(
       batch.map(async (id): Promise<GmailMessageSnapshot> => {
-        const response = await gmail.users.messages.get({
-          userId: "me",
-          id,
-          format: "metadata",
-          metadataHeaders: ["From", "Subject"],
-        });
+        const response = await withGmailRetry(
+          "gmail.messages.get.metadataSnapshot",
+          () =>
+            gmail.users.messages.get({
+              userId: "me",
+              id,
+              format: "metadata",
+              metadataHeaders: ["From", "Subject"],
+            }),
+          {
+            batchIndex: batchIndex + 1,
+            emailCount: batch.length,
+          }
+        );
 
         const headers = response.data.payload?.headers;
 
@@ -488,13 +725,41 @@ export async function getEmailsMetadataByIds(
     for (const result of settledMessages) {
       if (result.status === "fulfilled") {
         snapshots.push(result.value);
+      } else {
+        logGmailDiagnostic({
+          ...getGmailDiagnostic(
+            result.reason,
+            "gmail.messages.get.metadataSnapshot"
+          ),
+          batchIndex: batchIndex + 1,
+          emailCount: batch.length,
+        });
       }
     }
 
+    console.info("[gmail]", {
+      operation: "gmail.messages.get.metadataSnapshot",
+      batchIndex: batchIndex + 1,
+      totalBatches: batches.length,
+      emailCount: batch.length,
+      durationMs: Date.now() - batchStartedAt,
+      failedCount: settledMessages.filter(
+        (result) => result.status === "rejected"
+      ).length,
+    });
+
     if (batchIndex < batches.length - 1) {
-      await sleep(DEFAULT_GMAIL_BULK_BATCH_DELAY_MS);
+      await sleep(batchDelayMs);
     }
   }
+
+  console.info("[gmail]", {
+    operation: "gmail.messages.get.metadataSnapshot",
+    emailCount: normalizedIds.length,
+    batchCount: batches.length,
+    durationMs: Date.now() - startedAt,
+    snapshotCount: snapshots.length,
+  });
 
   return snapshots;
 }
