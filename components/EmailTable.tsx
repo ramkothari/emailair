@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { ExportSelectedButton } from "@/components/ExportSelectedButton";
+import type { ExecutionLifecycleEvent } from "@/lib/executor/events";
 import type { Email, EmailActionResult } from "@/types/email";
-
-const BULK_ACTION_BATCH_SIZE = 25;
-const BULK_ACTION_BATCH_DELAY_MS = 350;
 
 type EmailTableProps = {
   emails: Email[];
   onDeleteSelected: (ids: string[]) => Promise<EmailActionResult>;
   onArchiveSelected: (ids: string[]) => Promise<EmailActionResult>;
+  onRemoveEmails?: (ids: string[]) => void;
   heading?: string;
   description?: string;
   onViewEmail?: (id: string) => void;
@@ -23,30 +21,34 @@ type EmailTableProps = {
 };
 
 type BulkActionProgress = {
+  action: "archive" | "delete" | "export";
   completed: number;
   total: number;
+  startedAt: number;
+  failed: number;
+  etaSeconds: number | null;
 };
 
-function createBatches<T>(items: T[], batchSize: number): T[][] {
-  const batches: T[][] = [];
-
-  for (let index = 0; index < items.length; index += batchSize) {
-    batches.push(items.slice(index, index + batchSize));
-  }
-
-  return batches;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+type NotificationState =
+  | {
+      type: "loading";
+      action: "archive" | "delete" | "export";
+      completed: number;
+      total: number;
+      startedAt: number;
+      failed: number;
+      etaSeconds: number | null;
+    }
+  | {
+      type: "success" | "error";
+      message: string;
+    };
 
 export function EmailTable({
   emails,
   onDeleteSelected,
   onArchiveSelected,
+  onRemoveEmails,
   heading,
   description,
   onViewEmail,
@@ -56,7 +58,6 @@ export function EmailTable({
   isLoadingMore = false,
   showExportSelected = false,
 }: EmailTableProps) {
-  const router = useRouter();
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -68,6 +69,23 @@ export function EmailTable({
   const selectedCount = selectedIds.length;
   const allSelected = emails.length > 0 && selectedCount === emails.length;
   const hasSelection = selectedCount > 0;
+  const isExecuting = bulkActionProgress !== null || isPending;
+  const notification = bulkActionProgress
+    ? {
+        type: "loading" as const,
+        action: bulkActionProgress.action,
+        completed: bulkActionProgress.completed,
+        total: bulkActionProgress.total,
+        startedAt: bulkActionProgress.startedAt,
+        failed: bulkActionProgress.failed,
+        etaSeconds: bulkActionProgress.etaSeconds,
+      }
+    : message
+      ? {
+          type: message.success ? ("success" as const) : ("error" as const),
+          message: message.message,
+        }
+      : null;
 
   useEffect(() => {
     setSelectedIds((currentIds) =>
@@ -83,6 +101,20 @@ export function EmailTable({
     selectAllRef.current.indeterminate =
       selectedCount > 0 && selectedCount < emails.length;
   }, [selectedCount, emails.length]);
+
+  useEffect(() => {
+    if (!message?.success) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage(null);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [message]);
 
   function toggleEmail(id: string) {
     setMessage(null);
@@ -107,56 +139,165 @@ export function EmailTable({
     setSelectedIds(emails.map((email) => email.id));
   }
 
-  async function executeSelectedInBatches(
+  function downloadBase64File(base64: string, fileName: string): void {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: "application/zip" })
+    );
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function executeManualAction(
     ids: string[],
-    action: "archive" | "delete"
+    action: "archive" | "delete" | "export"
   ): Promise<EmailActionResult> {
-    const batches = createBatches(ids, BULK_ACTION_BATCH_SIZE);
-    const failedMessages: string[] = [];
-    let completed = 0;
+    const startedAt = Date.now();
+    let latestEvent: ExecutionLifecycleEvent | null = null;
 
     setBulkActionProgress({
-      completed,
+      action,
+      completed: 0,
       total: ids.length,
+      startedAt,
+      failed: 0,
+      etaSeconds: null,
     });
 
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
-      const batch = batches[batchIndex];
-      const result =
-        action === "archive"
-          ? await onArchiveSelected(batch)
-          : await onDeleteSelected(batch);
+    const response = await fetch("/api/executions/manual", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action,
+        emailIds: ids,
+      }),
+    });
 
-      completed += batch.length;
-      setBulkActionProgress({
-        completed,
-        total: ids.length,
-      });
+    if (!response.ok || !response.body) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
 
-      if (!result.success) {
-        failedMessages.push(result.message);
+      throw new Error(body?.error ?? "Execution failed.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+
+      if (done) {
+        break;
       }
 
-      if (batchIndex < batches.length - 1) {
-        await sleep(BULK_ACTION_BATCH_DELAY_MS);
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue;
+        }
+
+        const event = JSON.parse(line) as ExecutionLifecycleEvent;
+        latestEvent = event;
+
+        if (
+          event.type === "started" ||
+          event.type === "progress"
+        ) {
+          setBulkActionProgress({
+            action,
+            completed: event.processed,
+            total: event.total,
+            startedAt,
+            failed: event.failed,
+            etaSeconds: event.etaSeconds,
+          });
+        }
       }
+    }
+
+    if (buffer.trim()) {
+      latestEvent = JSON.parse(buffer) as ExecutionLifecycleEvent;
     }
 
     setBulkActionProgress(null);
 
-    if (failedMessages.length > 0) {
+    if (!latestEvent) {
+      throw new Error("Execution did not return a result.");
+    }
+
+    if (latestEvent.type === "failed") {
+      onRemoveEmails?.(latestEvent.affectedIds);
+      setSelectedIds((currentIds) =>
+        currentIds.filter((id) => !latestEvent.affectedIds.includes(id))
+      );
+
       return {
         success: false,
-        message: failedMessages[0],
+        message:
+          action === "archive"
+            ? `Archived ${latestEvent.affectedIds.length.toLocaleString()} email${
+                latestEvent.affectedIds.length === 1 ? "" : "s"
+              } \u2022 ${latestEvent.failed.toLocaleString()} failed`
+            : action === "delete"
+              ? `Deleted ${latestEvent.affectedIds.length.toLocaleString()} email${
+                  latestEvent.affectedIds.length === 1 ? "" : "s"
+                } \u2022 ${latestEvent.failed.toLocaleString()} failed`
+              : `Exported ${latestEvent.affectedIds.length.toLocaleString()} email${
+                  latestEvent.affectedIds.length === 1 ? "" : "s"
+                } \u2022 ${latestEvent.failed.toLocaleString()} failed`,
       };
     }
+
+    if (latestEvent.type !== "completed") {
+      throw new Error("Execution ended before completion.");
+    }
+
+    if (action === "export" && latestEvent.fileBase64) {
+      downloadBase64File(latestEvent.fileBase64, latestEvent.fileName ?? "emails-export.zip");
+    }
+
+    if (action === "archive" || action === "delete") {
+      onRemoveEmails?.(latestEvent.affectedIds);
+      setSelectedIds((currentIds) =>
+        currentIds.filter((id) => !latestEvent.affectedIds.includes(id))
+      );
+    }
+
+    const elapsedSeconds = latestEvent.durationMs / 1000;
 
     return {
       success: true,
       message:
         action === "archive"
-          ? `Archived ${ids.length} email${ids.length === 1 ? "" : "s"}.`
-          : `Moved ${ids.length} email${ids.length === 1 ? "" : "s"} to Trash.`,
+          ? `Archived ${latestEvent.processed.toLocaleString()} email${
+              latestEvent.processed === 1 ? "" : "s"
+            } in ${elapsedSeconds.toFixed(1)}s`
+          : action === "delete"
+            ? `Deleted ${latestEvent.processed.toLocaleString()} email${
+                latestEvent.processed === 1 ? "" : "s"
+              } in ${elapsedSeconds.toFixed(1)}s`
+            : `Exported ${latestEvent.processed.toLocaleString()} email${
+                latestEvent.processed === 1 ? "" : "s"
+              } in ${elapsedSeconds.toFixed(1)}s`,
     };
   }
 
@@ -173,13 +314,19 @@ export function EmailTable({
 
     startTransition(() => {
       void (async () => {
-        const result = await executeSelectedInBatches(idsToDelete, "delete");
+        try {
+          const result = await executeManualAction(idsToDelete, "delete");
 
-        setMessage(result);
-
-        if (result.success) {
-          setSelectedIds([]);
-          router.refresh();
+          setMessage(result);
+        } catch (error) {
+          setBulkActionProgress(null);
+          setMessage({
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to delete selected emails.",
+          });
         }
       })();
     });
@@ -198,13 +345,50 @@ export function EmailTable({
 
     startTransition(() => {
       void (async () => {
-        const result = await executeSelectedInBatches(idsToArchive, "archive");
+        try {
+          const result = await executeManualAction(idsToArchive, "archive");
 
-        setMessage(result);
+          setMessage(result);
+        } catch (error) {
+          setBulkActionProgress(null);
+          setMessage({
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to archive selected emails.",
+          });
+        }
+      })();
+    });
+  }
 
-        if (result.success) {
-          setSelectedIds([]);
-          router.refresh();
+  function handleExportSelected() {
+    if (!hasSelection) {
+      setMessage({
+        success: false,
+        message: "Select at least one email to export.",
+      });
+      return;
+    }
+
+    const idsToExport = [...selectedIds];
+
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await executeManualAction(idsToExport, "export");
+
+          setMessage(result);
+        } catch (error) {
+          setBulkActionProgress(null);
+          setMessage({
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to export selected emails.",
+          });
         }
       })();
     });
@@ -240,7 +424,7 @@ export function EmailTable({
             <button
               type="button"
               onClick={onAnalyzeResults}
-              disabled={emails.length === 0}
+              disabled={emails.length === 0 || isExecuting}
               className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
                 emails.length > 0
                   ? "border-[#60A5FA]/40 bg-black/[0.03] text-[#2563EB] hover:bg-[#60A5FA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
@@ -254,45 +438,41 @@ export function EmailTable({
           <button
             type="button"
             onClick={handleDeleteSelected}
-            disabled={!hasSelection || isPending}
+            disabled={!hasSelection || isExecuting}
             className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
               hasSelection
                 ? "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
                 : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
             }`}
           >
-            {isPending ? "Working..." : "Delete Selected"}
+            {isExecuting ? "Working..." : "Delete Selected"}
           </button>
 
           <button
             type="button"
             onClick={handleArchiveSelected}
-            disabled={!hasSelection || isPending}
+            disabled={!hasSelection || isExecuting}
             className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
               hasSelection
                 ? "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
                 : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
             }`}
           >
-            {isPending ? "Working..." : "Archive Selected"}
+            {isExecuting ? "Working..." : "Archive Selected"}
           </button>
 
           {showExportSelected ? (
-            <ExportSelectedButton selectedMessageIds={selectedIds} />
+            <ExportSelectedButton
+              selectedMessageIds={selectedIds}
+              onExecute={handleExportSelected}
+              disabled={isExecuting}
+            />
           ) : null}
         </div>
       </div>
 
-      {message ? (
-        <div
-          className={`border-b px-6 py-3 text-sm ${
-            message.success
-              ? "border-green-200 bg-green-50 text-green-700 dark:border-[#315341] dark:bg-[#1F2D26] dark:text-green-300"
-              : "border-red-200 bg-red-50 text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300"
-          }`}
-        >
-          {message.message}
-        </div>
+      {notification ? (
+        <NotificationBanner notification={notification} />
       ) : null}
 
       {emails.length === 0 ? (
@@ -397,13 +577,127 @@ export function EmailTable({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
 
-      {bulkActionProgress ? (
-        <div className="border-b bg-blue-50 px-6 py-3 text-sm text-blue-700 dark:border-[#3F3F46] dark:bg-[#202834] dark:text-[#A1C0E4]">
-          Completed {bulkActionProgress.completed.toLocaleString()} of{" "}
-          {bulkActionProgress.total.toLocaleString()} emails.
+function getLoadingLabel(action: BulkActionProgress["action"]): string {
+  if (action === "delete") {
+    return "Deleting";
+  }
+
+  if (action === "export") {
+    return "Exporting";
+  }
+
+  return "Archiving";
+}
+
+function formatEta(input: {
+  completed: number;
+  total: number;
+  etaSeconds: number | null;
+}): string {
+  if (input.completed <= 0) {
+    return "ETA calculating";
+  }
+
+  if (input.etaSeconds === null) {
+    return "ETA calculating";
+  }
+
+  return `ETA ${input.etaSeconds.toFixed(1)}s`;
+}
+
+function getProgressAccentClasses(action: BulkActionProgress["action"]): {
+  container: string;
+  track: string;
+  bar: string;
+  text: string;
+} {
+  if (action === "delete") {
+    return {
+      container:
+        "border-red-200 bg-red-50 text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300",
+      track: "bg-red-100 dark:bg-[#3A2424]",
+      bar: "bg-[#EF4444]",
+      text: "text-red-700 dark:text-red-300",
+    };
+  }
+
+  if (action === "export") {
+    return {
+      container:
+        "border-green-200 bg-green-50 text-green-700 dark:border-[#315341] dark:bg-[#1F2D26] dark:text-green-300",
+      track: "bg-green-100 dark:bg-[#213729]",
+      bar: "bg-[#22C55E]",
+      text: "text-green-700 dark:text-green-300",
+    };
+  }
+
+  return {
+    container:
+      "border-orange-200 bg-orange-50 text-[#D97706] dark:border-[#5A3A16] dark:bg-[#2F261B] dark:text-[#FBBF24]",
+    track: "bg-orange-100 dark:bg-[#3A2D1C]",
+    bar: "bg-[#D97706]",
+    text: "text-[#D97706] dark:text-[#FBBF24]",
+  };
+}
+
+function NotificationBanner({
+  notification,
+}: {
+  notification: NotificationState;
+}) {
+  if (notification.type === "loading") {
+    const percentage =
+      notification.total > 0
+        ? Math.min((notification.completed / notification.total) * 100, 100)
+        : 0;
+    const accent = getProgressAccentClasses(notification.action);
+
+    return (
+      <div className={`border-b px-6 py-3 text-sm ${accent.container}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 font-medium">
+            {getLoadingLabel(notification.action)}{" "}
+            {notification.total.toLocaleString()} Email
+            {notification.total === 1 ? "" : "s"}
+          </span>
+          <div
+            className={`h-2 min-w-24 flex-1 overflow-hidden rounded-full ${accent.track}`}
+          >
+            <div
+              className={`h-full rounded-full ${accent.bar}`}
+              style={{
+                width: `${percentage}%`,
+                transition: "width 300ms ease",
+              }}
+            />
+          </div>
+          <span className={`shrink-0 font-medium ${accent.text}`}>
+            {Math.round(percentage)}%
+          </span>
+          <span className="shrink-0">
+            {notification.completed.toLocaleString()}/
+            {notification.total.toLocaleString()} processed
+          </span>
+          <span className="shrink-0">{formatEta(notification)}</span>
         </div>
-      ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`border-b px-6 py-3 text-sm ${
+        notification.type === "success"
+          ? "border-green-200 bg-green-50 text-green-700 dark:border-[#315341] dark:bg-[#1F2D26] dark:text-green-300"
+          : "border-red-200 bg-red-50 text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300"
+      }`}
+    >
+      {notification.type === "success" ? "\u2713 " : "\u2715 "}
+      {notification.message}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import type {
   CommitSource,
 } from "@/lib/commits/types";
 
-export type ActionType = "delete" | "archive" | "download";
+export type ActionType = "delete" | "archive" | "download" | "export";
 
 export type ExecuteActionContext = {
   accessToken?: string;
@@ -17,6 +17,7 @@ export type ExecuteActionCommitOptions = {
   actionType?: CommitActionType;
   automationId?: string | null;
   metadata?: Record<string, unknown>;
+  onExecutionStarted?: (executionId: string) => void | Promise<void>;
 };
 
 export type ExecuteActionInput = {

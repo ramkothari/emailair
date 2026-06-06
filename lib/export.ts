@@ -14,12 +14,38 @@ function sanitizeFileName(value: string): string {
   return cleaned.length > 0 ? cleaned.slice(0, 120) : "email";
 }
 
-// Sanitize text for PDF rendering - WinAnsi font can't encode tabs and control characters
-function sanitizeForPDF(text: string): string {
-  return text
-    .replace(/\t/g, "    ") // Replace tabs with 4 spaces
-    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, " ") // Replace control chars with space
-    .replace(/\r\n/g, "\n") // Normalize line endings
+function normalizePdfGlyph(char: string): string {
+  const code = char.codePointAt(0) ?? 0;
+
+  if (char === "\n" || (code >= 0x20 && code <= 0x7e)) {
+    return char;
+  }
+
+  const replacements: Record<string, string> = {
+    "\u00a0": " ",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2026": "...",
+    "\u2022": "-",
+  };
+
+  return replacements[char] ?? "?";
+}
+
+export function sanitizeForPdf(text: string): string {
+  return Array.from(
+    text
+      .replace(/\t/g, "    ")
+      .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, " ")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+  )
+    .map(normalizePdfGlyph)
+    .join("")
     .trim();
 }
 
@@ -38,7 +64,7 @@ function wrapText(
   fontSize: number,
   maxWidth: number
 ): string[] {
-  const sanitizedText = sanitizeForPDF(text);
+  const sanitizedText = sanitizeForPdf(text);
   const lines: string[] = [];
 
   for (const paragraph of sanitizedText.split("\n")) {
@@ -99,7 +125,7 @@ export async function createEmailPdf(email: EmailDetails): Promise<Uint8Array> {
   ): void {
     const size = options?.size || 11;
     const font = options?.bold ? boldFont : regularFont;
-    const sanitizedText = sanitizeForPDF(text);
+    const sanitizedText = sanitizeForPdf(text);
 
     addPageIfNeeded(size + 8);
 

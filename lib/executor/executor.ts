@@ -16,7 +16,7 @@ import type {
   ExecutorProgress,
 } from "./types";
 
-const SUPPORTED_ACTIONS: ActionType[] = ["delete", "archive", "download"];
+const SUPPORTED_ACTIONS: ActionType[] = ["delete", "archive", "download", "export"];
 const DEFAULT_BATCH_DELAY_MS = 350;
 
 function sleep(ms: number): Promise<void> {
@@ -216,6 +216,7 @@ export async function executeAction(
       action: input.action,
       ...(commit.metadata ?? {}),
     },
+    onExecutionStarted: commit.onExecutionStarted,
     execute: async () => {
       const result = await executeActionInternal(executorInput, options);
 

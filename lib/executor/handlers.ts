@@ -47,4 +47,5 @@ export const executorHandlers: Record<ActionType, BatchActionHandler> = {
   archive: archiveHandler,
   delete: deleteHandler,
   download: downloadHandler,
+  export: downloadHandler,
 };

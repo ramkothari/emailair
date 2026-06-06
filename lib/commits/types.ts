@@ -73,6 +73,7 @@ export type RecordExecutionCommitInput<
   title: string;
   automationId?: string | null;
   metadata?: Record<string, unknown>;
+  onExecutionStarted?: (executionId: string) => void | Promise<void>;
   execute: (executionId: string) => Promise<TExecutionResult>;
 };
 

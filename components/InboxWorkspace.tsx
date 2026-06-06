@@ -255,6 +255,14 @@ export function InboxWorkspace({
           emails={emails}
           onDeleteSelected={onDeleteSelected}
           onArchiveSelected={onArchiveSelected}
+          onRemoveEmails={(ids) => {
+            setEmails((currentEmails) =>
+              currentEmails.filter((email) => !ids.includes(email.id))
+            );
+            setTotalMatches((currentTotal) =>
+              Math.max(currentTotal - ids.length, 0)
+            );
+          }}
           heading="Inbox Emails"
           description={tableDescription}
           onViewEmail={setViewingEmailId}

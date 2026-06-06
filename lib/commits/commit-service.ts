@@ -177,11 +177,6 @@ export async function recordExecutionCommit<
   const executionId = randomUUID();
   const startedAt = nowIso();
   const startMs = Date.now();
-
-  const affectedEmails = await getEmailsMetadataByIds(
-    input.accessToken,
-    input.emailIds
-  );
   const db = await getDb();
 
   await db.insert(executions).values({
@@ -199,7 +194,13 @@ export async function recordExecutionCommit<
     metadata: input.metadata ?? {},
   });
 
+  await input.onExecutionStarted?.(executionId);
+
   try {
+    const affectedEmails = await getEmailsMetadataByIds(
+      input.accessToken,
+      input.emailIds
+    );
     const result = await input.execute(executionId);
     const durationMs = Date.now() - startMs;
     const finishedAt = nowIso();

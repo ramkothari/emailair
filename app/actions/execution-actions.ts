@@ -28,6 +28,7 @@ const ACTION_LIMITS: Record<ActionType, number> = {
   archive: 100,
   delete: 100,
   download: 50,
+  export: 50,
 };
 
 const LIMIT_MESSAGE =
