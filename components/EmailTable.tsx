@@ -313,7 +313,7 @@ export function EmailTable({
                   checked={allSelected}
                   onChange={toggleAllEmails}
                   aria-label="Select all emails"
-                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
+                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B] dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                 />
               </th>
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-900 dark:text-[#71717A]">
@@ -352,7 +352,7 @@ export function EmailTable({
                       checked={checked}
                       onChange={() => toggleEmail(email.id)}
                       aria-label={`Select email from ${email.sender}`}
-                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
+                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B] dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                     />
                   </td>
                   <td className="max-w-[240px] truncate px-6 py-4 text-sm font-medium text-[#D97706] dark:text-[#D97706]">
@@ -369,7 +369,7 @@ export function EmailTable({
                       <button
                         type="button"
                         onClick={() => onViewEmail(email.id)}
-                        className="rounded-xl border border-[rgba(0,0,0,0.08)] px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3] dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#18181B] dark:hover:text-[#F5F5F5]"
+                        className="inline-flex h-8 items-center rounded-full border border-[rgba(0,0,0,0.08)] px-3 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3] dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#18181B] dark:hover:text-[#F5F5F5]"
                       >
                         View
                       </button>
@@ -391,7 +391,7 @@ export function EmailTable({
               void onLoadMore();
             }}
             disabled={!hasMore || isLoadingMore}
-            className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#F5F5F5] dark:hover:bg-[#2A2A2E]"
+            className="inline-flex h-8 items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#F5F5F5] dark:hover:bg-[#2A2A2E]"
           >
             {isLoadingMore ? "Loading..." : "Load More"}
           </button>

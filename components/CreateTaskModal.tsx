@@ -86,7 +86,7 @@ export function CreateTaskModal({
       aria-modal="true"
       aria-labelledby="create-task-title"
     >
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 id="create-task-title" className="text-lg font-semibold text-gray-900">
             Save As Task
@@ -112,7 +112,7 @@ export function CreateTaskModal({
               onChange={(event) => setTaskName(event.target.value)}
               placeholder="Amazon Promotions Cleanup"
               maxLength={120}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
 
             <p className="mt-1 text-xs text-gray-500">
@@ -133,7 +133,7 @@ export function CreateTaskModal({
               type="text"
               value={query}
               readOnly
-              className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"
+              className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"
             />
           </div>
 
@@ -149,7 +149,7 @@ export function CreateTaskModal({
               id="task-action"
               value={action}
               onChange={(event) => setAction(event.target.value as TaskAction)}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               {TASK_ACTION_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -160,12 +160,12 @@ export function CreateTaskModal({
           </div>
 
           {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}
 
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             You can run this task later from your task library. Each run will show a preview and require your confirmation before executing.
           </div>
         </div>
@@ -175,7 +175,7 @@ export function CreateTaskModal({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -184,7 +184,7 @@ export function CreateTaskModal({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? "Saving..." : "Save Task"}
           </button>

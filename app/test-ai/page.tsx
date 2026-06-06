@@ -175,34 +175,34 @@ export default function TestAnalyzePage() {
       </nav>
 
       <section className="space-y-6">
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <h2 className="mb-4 text-xl font-semibold">Test Endpoints</h2>
 
           <div className="space-y-4">
             <button
               onClick={() => testAnalyzeEmailsEndpoint(setResults)}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700"
             >
               Test /api/ai/analyze-search
             </button>
 
             <button
               onClick={() => testSingleAnalysis(setResults)}
-              className="w-full rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full bg-green-600 px-3 text-xs font-medium text-white hover:bg-green-700"
             >
               Test /api/ai/test-analyze
             </button>
 
             <button
               onClick={() => testAllControllers(setResults)}
-              className="w-full rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full bg-purple-600 px-3 text-xs font-medium text-white hover:bg-purple-700"
             >
               Test All AI Controllers
             </button>
 
             <button
               onClick={() => debugProviderConfig(setResults)}
-              className="w-full rounded-lg bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full bg-yellow-600 px-3 text-xs font-medium text-white hover:bg-yellow-700"
             >
               🔧 Debug Provider Config
             </button>
@@ -211,12 +211,12 @@ export default function TestAnalyzePage() {
 
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Results</h2>
-          <div className="min-h-20 rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-sm whitespace-pre-wrap break-words">
+          <div className="min-h-20 rounded-2xl border border-gray-200 bg-gray-50 p-4 font-mono text-sm whitespace-pre-wrap break-words">
             {results}
           </div>
         </div>
 
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <h3 className="font-semibold text-blue-900">Instructions</h3>
           <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-blue-800">
             <li>Click a test button to run the API test</li>

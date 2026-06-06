@@ -36,7 +36,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
   const showAnalysisSampleWarning = result.foundCount > result.analyzedCount;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-900">
           Impact Summary
@@ -47,14 +47,14 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-sm font-medium text-gray-500">Action</p>
           <p className="mt-2 text-2xl font-bold text-gray-900">
             {formatAction(result.action)}
           </p>
         </div>
 
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-sm font-medium text-gray-500">Found</p>
           <p className="mt-2 text-2xl font-bold text-gray-900">
             {result.foundCount}
@@ -62,7 +62,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
           <p className="mt-1 text-xs text-gray-500">total matches</p>
         </div>
 
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-sm font-medium text-gray-500">Analyzed</p>
           <p className="mt-2 text-2xl font-bold text-gray-900">
             {result.analyzedCount}
@@ -70,7 +70,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
           <p className="mt-1 text-xs text-gray-500">for AI analysis</p>
         </div>
 
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-sm font-medium text-gray-500">
             Potentially Important
           </p>
@@ -81,7 +81,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
       </div>
 
       {showAnalysisSampleWarning ? (
-        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <p className="text-sm text-blue-800">
             <span className="font-semibold">Note:</span> AI analysis ran on the
             first {result.analyzedCount} emails of {result.foundCount} total
@@ -90,7 +90,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
         </div>
       ) : null}
 
-      <div className="mt-5 rounded-lg border bg-gray-50 p-4">
+      <div className="mt-5 rounded-2xl border bg-gray-50 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-medium text-gray-700">Risk</p>
           <span
@@ -120,7 +120,7 @@ export function TaskImpactSummary({ result }: TaskImpactSummaryProps) {
         )}
       </div>
 
-      <div className="mt-5 rounded-lg border bg-blue-50 p-4">
+      <div className="mt-5 rounded-2xl border bg-blue-50 p-4">
         <p className="text-sm font-medium text-blue-900">AI Summary</p>
         <p className="mt-2 text-sm text-blue-800">
           {result.summary.summary}

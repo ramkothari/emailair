@@ -82,7 +82,7 @@ export function TaskConfirmationDialog({
       aria-modal="true"
       aria-labelledby="task-confirmation-title"
     >
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
         <div className="border-b px-6 py-4">
           <h2
             id="task-confirmation-title"
@@ -106,7 +106,7 @@ export function TaskConfirmationDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-lg border bg-gray-50 p-4">
+            <div className="rounded-2xl border bg-gray-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Action
               </p>
@@ -115,7 +115,7 @@ export function TaskConfirmationDialog({
               </p>
             </div>
 
-            <div className="rounded-lg border bg-gray-50 p-4">
+            <div className="rounded-2xl border bg-gray-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Found
               </p>
@@ -124,7 +124,7 @@ export function TaskConfirmationDialog({
               </p>
             </div>
 
-            <div className="rounded-lg border bg-gray-50 p-4">
+            <div className="rounded-2xl border bg-gray-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Analyzed
               </p>
@@ -133,7 +133,7 @@ export function TaskConfirmationDialog({
               </p>
             </div>
 
-            <div className="rounded-lg border bg-gray-50 p-4">
+            <div className="rounded-2xl border bg-gray-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Risk
               </p>
@@ -148,7 +148,7 @@ export function TaskConfirmationDialog({
           </div>
 
           {isLargeExecution ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
               <p className="text-sm font-semibold text-red-900">
                 Large Execution Warning
               </p>
@@ -159,7 +159,7 @@ export function TaskConfirmationDialog({
             </div>
           ) : null}
 
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
             <p className="text-sm font-semibold text-yellow-900">
               Impact Summary
             </p>
@@ -176,7 +176,7 @@ export function TaskConfirmationDialog({
             <p className="text-sm font-semibold text-gray-900">Warnings</p>
 
             {warnings.length === 0 ? (
-              <p className="mt-2 rounded-lg border bg-gray-50 p-3 text-sm text-gray-600">
+              <p className="mt-2 rounded-2xl border bg-gray-50 p-3 text-sm text-gray-600">
                 No warnings detected.
               </p>
             ) : (
@@ -184,7 +184,7 @@ export function TaskConfirmationDialog({
                 {warnings.map((warning, index) => (
                   <li
                     key={`${warning}-${index}`}
-                    className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
+                    className="rounded-2xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
                   >
                     {warning}
                   </li>
@@ -199,7 +199,7 @@ export function TaskConfirmationDialog({
             type="button"
             onClick={onCancel}
             disabled={isExecuting}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -208,7 +208,7 @@ export function TaskConfirmationDialog({
             type="button"
             onClick={onConfirm}
             disabled={isExecuting}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${getConfirmButtonClass(
+            className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${getConfirmButtonClass(
               action
             )}`}
           >

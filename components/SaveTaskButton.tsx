@@ -61,7 +61,7 @@ export function SaveTaskButton({
   const hasQuery = query.trim().length > 0;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900">
@@ -79,20 +79,20 @@ export function SaveTaskButton({
           type="button"
           onClick={() => setCreateModalOpen(true)}
           disabled={!hasQuery}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Save As Task
         </button>
       </div>
 
       {!hasQuery ? (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+        <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
           Run a search before saving a task.
         </div>
       ) : null}
 
       {storageError ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {storageError}
         </div>
       ) : null}
@@ -101,7 +101,7 @@ export function SaveTaskButton({
         <h3 className="text-sm font-semibold text-gray-900">Saved Tasks</h3>
 
         {tasks.length === 0 ? (
-          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
+          <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600">
             No saved tasks yet.
           </div>
         ) : (

@@ -53,7 +53,7 @@ export function InboxAIAnalysisModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl border border-gray-300 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
+            className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
           >
             Close
           </button>
@@ -160,7 +160,7 @@ export function InboxAIAnalysisModal({
                   type="button"
                   onClick={onArchiveResults}
                   disabled={isExecuting || totalEmailsFound === 0}
-                  className="rounded-2xl bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
+                  className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
                 >
                   Archive Emails
                 </button>
@@ -169,7 +169,7 @@ export function InboxAIAnalysisModal({
                   type="button"
                   onClick={onMoveResultsToTrash}
                   disabled={isExecuting || totalEmailsFound === 0}
-                  className="rounded-2xl bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Move To Trash
                 </button>
@@ -177,7 +177,7 @@ export function InboxAIAnalysisModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-2xl border border-gray-300 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
+                  className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
                 >
                   Review Emails
                 </button>
@@ -185,7 +185,7 @@ export function InboxAIAnalysisModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-2xl border border-gray-300 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
+                  className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#3F3F46] dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
                 >
                   Keep Results
                 </button>

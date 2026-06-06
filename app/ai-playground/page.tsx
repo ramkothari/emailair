@@ -69,7 +69,7 @@ export default function AIPlaygroundPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-8">
-        <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-200 p-6">
+        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-200 p-6">
           <div className="space-y-4">
             {/* Test Type Selection */}
             <div>
@@ -87,7 +87,7 @@ export default function AIPlaygroundPage() {
                       | "summarize"
                   )
                 }
-                className="mt-2 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                className="mt-2 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
               >
                 <option value="intent">Parse Intent</option>
                 <option value="analyze">Analyze Emails</option>
@@ -107,21 +107,21 @@ export default function AIPlaygroundPage() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={6}
-                className="mt-2 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                className="mt-2 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
                 placeholder="Enter text for testing..."
               />
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-200">
+              <div className="rounded-2xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-200">
                 {error}
               </div>
             )}
 
             {/* Result Display */}
             {result && (
-              <div className="rounded-lg bg-blue-50 p-4 ring-1 ring-blue-200">
+              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-200">
                 <p className="mb-2 text-sm font-semibold text-blue-900">
                   Result:
                 </p>
@@ -135,7 +135,7 @@ export default function AIPlaygroundPage() {
             <button
               onClick={handleTest}
               disabled={loading || !prompt.trim()}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Testing..." : "Run Test"}
             </button>
@@ -144,7 +144,7 @@ export default function AIPlaygroundPage() {
 
         {/* Info Panel */}
         <div className="mt-8 space-y-4">
-          <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
+          <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">About</h2>
             <ul className="mt-4 space-y-2 text-sm text-gray-600">
               <li>
@@ -166,7 +166,7 @@ export default function AIPlaygroundPage() {
             </ul>
           </div>
 
-          <div className="rounded-lg bg-blue-50 p-6 ring-1 ring-blue-200">
+          <div className="rounded-2xl bg-blue-50 p-6 ring-1 ring-blue-200">
             <h2 className="text-lg font-semibold text-blue-900">
               Provider Configuration
             </h2>

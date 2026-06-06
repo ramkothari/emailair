@@ -403,7 +403,7 @@ export function FilterPreview({
                   }}
                   disabled={isExecutingAction}
                   aria-label="Select all preview emails"
-                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50 dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                 />
               </th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
@@ -441,7 +441,7 @@ export function FilterPreview({
                       onChange={() => toggleEmailSelection(email.id)}
                       disabled={isExecutingAction}
                       aria-label={`Select email from ${email.sender}`}
-                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 disabled:cursor-not-allowed disabled:opacity-50 dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                     />
                   </td>
 
@@ -470,7 +470,7 @@ export function FilterPreview({
                     <button
                       type="button"
                       onClick={() => setViewingEmailId(email.id)}
-                      className="rounded-xl border border-[rgba(0,0,0,0.08)] px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3]"
+                      className="inline-flex h-8 items-center rounded-full border border-[rgba(0,0,0,0.08)] px-3 text-xs font-medium text-gray-700 transition hover:bg-[#F3F3F3]"
                     >
                       View
                     </button>

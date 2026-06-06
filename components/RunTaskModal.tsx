@@ -67,7 +67,7 @@ export function RunTaskModal({
       aria-modal="true"
       aria-labelledby="run-task-title"
     >
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4 sticky top-0 bg-white">
           <h2 id="run-task-title" className="text-lg font-semibold text-gray-900">
             Run Task: {task.name}
@@ -81,11 +81,11 @@ export function RunTaskModal({
         </div>
 
         <div className="space-y-5 px-6 py-5">
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
             <strong>Review carefully:</strong> This will {actionLabel.toLowerCase()} all matching emails after you confirm.
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
             <p className="text-sm font-medium text-gray-900">
               About to {actionLabel.toLowerCase()}:
             </p>
@@ -98,12 +98,12 @@ export function RunTaskModal({
           </div>
 
           {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}
 
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <strong>AI Analysis:</strong> Results will be analyzed before you confirm the final action.
           </div>
         </div>
@@ -113,7 +113,7 @@ export function RunTaskModal({
             type="button"
             onClick={onClose}
             disabled={isExecuting}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -122,7 +122,7 @@ export function RunTaskModal({
             type="button"
             onClick={handleConfirm}
             disabled={isExecuting}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${
+            className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-white ${
               task.action === "delete"
                 ? "bg-red-600 hover:bg-red-700"
                 : "bg-blue-600 hover:bg-blue-700"

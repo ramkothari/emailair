@@ -63,7 +63,7 @@ export function AnalyticsRefreshControls({
           type="button"
           onClick={refreshAnalytics}
           disabled={isPending}
-          className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-800 hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#F5F5F5] dark:hover:bg-white/[0.08]"
+          className="inline-flex h-8 items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-xs font-medium text-gray-800 hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#F5F5F5] dark:hover:bg-white/[0.08]"
         >
           {isPending ? "Refreshing..." : "Refresh Analytics"}
         </button>

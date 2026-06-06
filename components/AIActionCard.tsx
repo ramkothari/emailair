@@ -173,7 +173,7 @@ export function AIActionCard({
           type="button"
           onClick={onArchiveSearchResults}
           disabled={isExecuting || totalEmailsFound === 0 || !onArchiveSearchResults}
-          className="rounded-2xl bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Archive Results
         </button>
@@ -182,7 +182,7 @@ export function AIActionCard({
           type="button"
           onClick={onMoveSearchResultsToTrash}
           disabled={isExecuting || totalEmailsFound === 0 || !onMoveSearchResultsToTrash}
-          className="rounded-2xl bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Move Results To Trash
         </button>
@@ -191,7 +191,7 @@ export function AIActionCard({
           type="button"
           disabled
           title="Download execution is deferred."
-          className="rounded-2xl border px-3.5 py-1.5 text-sm font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Download Search Results
         </button>

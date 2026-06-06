@@ -162,7 +162,7 @@ export function InboxSearchHeader({
                     onChange={(event) =>
                       updateValue("hasAttachment", event.target.checked)
                     }
-                    className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white text-gray-950 transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
+                    className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white text-gray-950 transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B] dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                   />
                   Has Attachment
                 </label>
@@ -174,7 +174,7 @@ export function InboxSearchHeader({
                     onChange={(event) =>
                       updateValue("unread", event.target.checked)
                     }
-                    className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white text-gray-950 transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B]"
+                    className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white text-gray-950 transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:border-[#3F3F46] dark:bg-[#18181B] dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
                   />
                   Unread
                 </label>
@@ -184,7 +184,7 @@ export function InboxSearchHeader({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="inline-flex h-9 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-[#F3F3F3] dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#A1A1AA] dark:hover:bg-[#18181B] dark:hover:text-[#F5F5F5]"
+                  className="inline-flex h-8 items-center justify-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-[#F3F3F3] dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#A1A1AA] dark:hover:bg-[#18181B] dark:hover:text-[#F5F5F5]"
                 >
                   Reset Filters
                 </button>
@@ -192,7 +192,7 @@ export function InboxSearchHeader({
                 <button
                   type="submit"
                   disabled={isSearching}
-                  className="inline-flex h-9 items-center justify-center rounded-2xl bg-gray-950 px-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
+                  className="inline-flex h-8 items-center justify-center rounded-full bg-gray-950 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
                 >
                   Apply Filters
                 </button>

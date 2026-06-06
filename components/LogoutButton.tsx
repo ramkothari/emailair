@@ -6,7 +6,7 @@ export function LogoutButton() {
   return (
     <button
       onClick={() => signOut({ redirectTo: "/" })}
-      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+      className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700"
     >
       Sign Out
     </button>

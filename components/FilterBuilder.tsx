@@ -251,7 +251,7 @@ export function FilterBuilder({
                 setHasAttachment(event.target.checked);
                 resetPreviewState();
               }}
-              className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30"
+              className="h-3.5 w-3.5 appearance-none rounded-full border border-gray-300 bg-white transition checked:border-[#D97706] checked:bg-[#D97706] focus:ring-2 focus:ring-[#D97706]/30 dark:checked:border-[#D97706] dark:checked:bg-[#D97706]"
             />
             Has Attachment
           </label>
@@ -263,7 +263,7 @@ export function FilterBuilder({
           type="button"
           onClick={handlePreview}
           disabled={isPending}
-          className="rounded-2xl bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Working..." : "Preview"}
         </button>
@@ -272,7 +272,7 @@ export function FilterBuilder({
           type="button"
           onClick={handleClear}
           disabled={isPending}
-          className="rounded-2xl border px-3.5 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear
         </button>

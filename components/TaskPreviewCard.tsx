@@ -274,7 +274,7 @@ export function TaskPreviewCard({
   const canConfirm = Boolean(validAction) && emailIds.length > 0 && !isExecuting;
 
   return (
-    <div className="space-y-5 rounded-xl border bg-white p-5 shadow-sm">
+    <div className="space-y-5 rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">{taskName}</h2>
@@ -295,7 +295,7 @@ export function TaskPreviewCard({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Matching Emails
           </p>
@@ -304,7 +304,7 @@ export function TaskPreviewCard({
           </p>
         </div>
 
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Analyzed Sample
           </p>
@@ -313,7 +313,7 @@ export function TaskPreviewCard({
           </p>
         </div>
 
-        <div className="rounded-lg border bg-gray-50 p-4">
+        <div className="rounded-2xl border bg-gray-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Risk Level
           </p>
@@ -327,14 +327,14 @@ export function TaskPreviewCard({
         </div>
       </div>
 
-      <div className="rounded-lg border bg-gray-50 p-4">
+      <div className="rounded-2xl border bg-gray-50 p-4">
         <h3 className="text-sm font-semibold text-gray-900">AI Summary</h3>
         <p className="mt-2 text-sm leading-6 text-gray-700">
           {analysis.summary}
         </p>
       </div>
 
-      <div className="rounded-lg border bg-gray-50 p-4">
+      <div className="rounded-2xl border bg-gray-50 p-4">
         <h3 className="text-sm font-semibold text-gray-900">Warnings</h3>
 
         {analysis.warnings.length === 0 ? (
@@ -344,7 +344,7 @@ export function TaskPreviewCard({
             {analysis.warnings.map((warning, index) => (
               <li
                 key={`${warning}-${index}`}
-                className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
+                className="rounded-2xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800"
               >
                 {warning}
               </li>
@@ -353,7 +353,7 @@ export function TaskPreviewCard({
         )}
       </div>
 
-      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+      <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
         <h3 className="text-sm font-semibold text-yellow-900">
           Impact Summary
         </h3>
@@ -373,7 +373,7 @@ export function TaskPreviewCard({
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-2xl border">
         <div className="border-b bg-gray-50 px-4 py-3">
           <h3 className="text-sm font-semibold text-gray-900">
             Matching Emails
@@ -449,7 +449,7 @@ export function TaskPreviewCard({
       ) : null}
 
       {isExecuting && validAction ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <p className="text-sm font-semibold text-blue-900">
             Executing Task...
           </p>
@@ -464,7 +464,7 @@ export function TaskPreviewCard({
           type="button"
           onClick={onCancel}
           disabled={isExecuting}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-full border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Cancel
         </button>
@@ -473,7 +473,7 @@ export function TaskPreviewCard({
           type="button"
           onClick={() => setIsConfirmationOpen(true)}
           disabled={!canConfirm}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {validAction
             ? `Confirm ${getActionLabel(validAction)}`

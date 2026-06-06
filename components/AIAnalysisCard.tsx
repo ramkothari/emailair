@@ -179,7 +179,7 @@ export function AIAnalysisCard({
               type="button"
               onClick={analyzeResults}
               disabled={isAnalyzing}
-              className="rounded-2xl bg-indigo-600 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
+              className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
             >
               {isAnalyzing
                 ? "Analyzing..."
@@ -204,7 +204,7 @@ export function AIAnalysisCard({
             <button
               type="button"
               onClick={analyzeResults}
-              className="rounded-2xl bg-red-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+              className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700"
             >
               Retry Analysis
             </button>

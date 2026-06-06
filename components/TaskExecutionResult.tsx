@@ -62,7 +62,7 @@ export function TaskExecutionResult({
 
   return (
     <div
-      className={`rounded-xl border p-5 ${
+      className={`rounded-2xl border p-5 ${
         isSuccess
           ? "border-green-200 bg-green-50"
           : "border-red-200 bg-red-50"
@@ -93,7 +93,7 @@ export function TaskExecutionResult({
               type="button"
               onClick={onRetry}
               disabled={isRetrying}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRetrying ? "Retrying..." : "Retry"}
             </button>
@@ -103,7 +103,7 @@ export function TaskExecutionResult({
             type="button"
             onClick={onClose}
             disabled={isRetrying}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-full border border-gray-300 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Close
           </button>
@@ -111,7 +111,7 @@ export function TaskExecutionResult({
       </div>
 
       <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg bg-white p-4">
+        <div className="rounded-2xl bg-white p-4">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Action
           </dt>
@@ -120,7 +120,7 @@ export function TaskExecutionResult({
           </dd>
         </div>
 
-        <div className="rounded-lg bg-white p-4">
+        <div className="rounded-2xl bg-white p-4">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Affected
           </dt>
@@ -130,7 +130,7 @@ export function TaskExecutionResult({
           </dd>
         </div>
 
-        <div className="rounded-lg bg-white p-4">
+        <div className="rounded-2xl bg-white p-4">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Execution Time
           </dt>
@@ -139,7 +139,7 @@ export function TaskExecutionResult({
           </dd>
         </div>
 
-        <div className="rounded-lg bg-white p-4">
+        <div className="rounded-2xl bg-white p-4">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Completed
           </dt>
@@ -151,7 +151,7 @@ export function TaskExecutionResult({
 
       {result.message ? (
         <p
-          className={`mt-4 rounded-lg bg-white p-4 text-sm ${
+          className={`mt-4 rounded-2xl bg-white p-4 text-sm ${
             isSuccess ? "text-green-800" : "text-red-800"
           }`}
         >
@@ -160,7 +160,7 @@ export function TaskExecutionResult({
       ) : null}
 
       {result.error ? (
-        <div className="mt-4 rounded-lg bg-white p-4">
+        <div className="mt-4 rounded-2xl bg-white p-4">
           <p className="text-sm font-semibold text-red-900">Reason:</p>
           <p className="mt-1 text-sm text-red-800">{result.error}</p>
         </div>
