@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { recordExecutionCommit } from "@/lib/commits/commit-service";
+import { requireSessionUserId } from "@/lib/commits/session";
 import { getAttachment, getEmailDetails } from "@/lib/gmail";
 import { buildMultipleEmailsZip } from "@/lib/export";
 import type { DownloadedAttachment } from "@/types/email";
@@ -28,43 +30,72 @@ export async function POST(request: Request) {
   }
 
   try {
-    const exportItems = await Promise.all(
-      body.messageIds.map(async (messageId) => {
-        const email = await getEmailDetails(
-          session.accessToken as string,
-          messageId
-        );
+    const userId = requireSessionUserId(session);
+    let zip: Uint8Array | null = null;
 
-        const attachments: DownloadedAttachment[] = await Promise.all(
-          email.attachments.map(async (attachment) => {
-            const data = await getAttachment(
+    await recordExecutionCommit({
+      userId,
+      accessToken: session.accessToken,
+      emailIds: body.messageIds,
+      source: "manual",
+      actionType: "export",
+      title: "Exported Selected Emails",
+      metadata: {
+        initiatedFrom: "export-selected-api",
+      },
+      execute: async () => {
+        const exportItems = await Promise.all(
+          body.messageIds!.map(async (messageId) => {
+            const email = await getEmailDetails(
               session.accessToken as string,
-              email.id,
-              attachment.attachmentId
+              messageId
+            );
+
+            const attachments: DownloadedAttachment[] = await Promise.all(
+              email.attachments.map(async (attachment) => {
+                const data = await getAttachment(
+                  session.accessToken as string,
+                  email.id,
+                  attachment.attachmentId
+                );
+
+                return {
+                  ...attachment,
+                  data,
+                };
+              })
             );
 
             return {
-              ...attachment,
-              data,
+              email,
+              attachments,
             };
           })
         );
 
+        zip = await buildMultipleEmailsZip(exportItems);
+
         return {
-          email,
-          attachments,
+          success: true,
+          emailsProcessed: body.messageIds!.length,
+          emailsSucceeded: body.messageIds!.length,
+          emailsFailed: 0,
         };
-      })
-    );
+      },
+    });
 
-    const zip = await buildMultipleEmailsZip(exportItems);
+    const exportZip = zip as Uint8Array | null;
 
-    return new Response(zip, {
+    if (!exportZip) {
+      throw new Error("Failed to build selected email export.");
+    }
+
+    return new Response(exportZip, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition":
           "attachment; filename*=UTF-8''emails-export.zip",
-        "Content-Length": String(zip.length),
+        "Content-Length": String(exportZip.length),
       },
     });
   } catch (error) {

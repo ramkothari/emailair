@@ -20,6 +20,10 @@ const navigationItems = [
     href: "/dashboard/automation",
     label: "Automation",
   },
+  {
+    href: "/dashboard/commits",
+    label: "Commits",
+  },
 ];
 
 export function DashboardShell({ email, children }: DashboardShellProps) {

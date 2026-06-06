@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { recordExecutionCommit } from "@/lib/commits/commit-service";
+import { requireSessionUserId } from "@/lib/commits/session";
 import {
   archiveEmails,
   deleteEmails,
@@ -104,7 +106,30 @@ export async function archiveFilterAction(
   }
 
   try {
-    await archiveEmails(currentSession.accessToken, emailIds);
+    const userId = requireSessionUserId(currentSession);
+
+    await recordExecutionCommit({
+      userId,
+      accessToken: currentSession.accessToken,
+      emailIds,
+      source: "manual",
+      actionType: "archive",
+      title: "Archived Filter Results",
+      metadata: {
+        initiatedFrom: "filter-actions",
+        filter,
+      },
+      execute: async () => {
+        await archiveEmails(currentSession.accessToken as string, emailIds);
+
+        return {
+          success: true,
+          emailsProcessed: emailIds.length,
+          emailsSucceeded: emailIds.length,
+          emailsFailed: 0,
+        };
+      },
+    });
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/search");
@@ -146,7 +171,30 @@ export async function deleteFilterAction(
   }
 
   try {
-    await deleteEmails(currentSession.accessToken, emailIds);
+    const userId = requireSessionUserId(currentSession);
+
+    await recordExecutionCommit({
+      userId,
+      accessToken: currentSession.accessToken,
+      emailIds,
+      source: "manual",
+      actionType: "delete",
+      title: "Deleted Filter Results",
+      metadata: {
+        initiatedFrom: "filter-actions",
+        filter,
+      },
+      execute: async () => {
+        await deleteEmails(currentSession.accessToken as string, emailIds);
+
+        return {
+          success: true,
+          emailsProcessed: emailIds.length,
+          emailsSucceeded: emailIds.length,
+          emailsFailed: 0,
+        };
+      },
+    });
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/search");

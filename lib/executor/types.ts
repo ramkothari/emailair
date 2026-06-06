@@ -1,13 +1,29 @@
+import type {
+  CommitActionType,
+  CommitSource,
+} from "@/lib/commits/types";
+
 export type ActionType = "delete" | "archive" | "download";
 
 export type ExecuteActionContext = {
   accessToken?: string;
 };
 
+export type ExecuteActionCommitOptions = {
+  userId: string;
+  accessToken: string;
+  title: string;
+  source: CommitSource;
+  actionType?: CommitActionType;
+  automationId?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
 export type ExecuteActionInput = {
   action: ActionType;
   emailIds: string[];
   context?: ExecuteActionContext;
+  commit?: ExecuteActionCommitOptions;
 };
 
 export type ExecuteActionResult = {

@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { requireSessionUserId } from "@/lib/commits/session";
 import { executeAction } from "@/lib/executor/executor";
 import type { ActionType, ExecuteActionResult } from "@/lib/executor/types";
 
@@ -9,6 +10,8 @@ type SupportedBulkAction = Extract<ActionType, "archive" | "delete">;
 export type ExecuteBulkActionInput = {
   action: SupportedBulkAction;
   emailIds: string[];
+  title?: string;
+  automationId?: string | null;
 };
 
 export type ExecuteBulkActionResponse =
@@ -48,6 +51,14 @@ function getErrorMessage(error: unknown): string {
   return "Execution failed. Please try again.";
 }
 
+function getCommitTitle(action: SupportedBulkAction): string {
+  if (action === "archive") {
+    return "Archived Emails";
+  }
+
+  return "Deleted Emails";
+}
+
 export async function executeBulkAction(
   input: ExecuteBulkActionInput
 ): Promise<ExecuteBulkActionResponse> {
@@ -79,11 +90,22 @@ export async function executeBulkAction(
   }
 
   try {
+    const userId = requireSessionUserId(session);
     const result = await executeAction({
       action: input.action,
       emailIds,
       context: {
         accessToken: session.accessToken,
+      },
+      commit: {
+        userId,
+        accessToken: session.accessToken,
+        title: input.title ?? getCommitTitle(input.action),
+        source: input.automationId ? "automation" : "manual",
+        automationId: input.automationId ?? null,
+        metadata: {
+          initiatedFrom: "execution-actions",
+        },
       },
     });
 

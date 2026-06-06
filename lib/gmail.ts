@@ -6,6 +6,12 @@ import type { EmailFilter } from "@/types/filter";
 const DEFAULT_GMAIL_BULK_BATCH_SIZE = 25;
 const DEFAULT_GMAIL_BULK_BATCH_DELAY_MS = 350;
 
+export type GmailMessageSnapshot = {
+  emailId: string;
+  sender: string;
+  subject: string;
+};
+
 function getPositiveIntegerEnv(name: string, fallback: number): number {
   const rawValue = process.env[name];
 
@@ -440,6 +446,57 @@ export function getGmailClient(accessToken: string) {
   auth.setCredentials({ access_token: accessToken });
 
   return google.gmail({ version: "v1", auth });
+}
+
+export async function getEmailsMetadataByIds(
+  accessToken: string,
+  ids: string[]
+): Promise<GmailMessageSnapshot[]> {
+  const normalizedIds = Array.from(
+    new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0))
+  );
+
+  if (normalizedIds.length === 0) {
+    return [];
+  }
+
+  const gmail = getGmailClient(accessToken);
+  const batches = createBatches(normalizedIds, DEFAULT_GMAIL_BULK_BATCH_SIZE);
+  const snapshots: GmailMessageSnapshot[] = [];
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
+    const settledMessages = await Promise.allSettled(
+      batch.map(async (id): Promise<GmailMessageSnapshot> => {
+        const response = await gmail.users.messages.get({
+          userId: "me",
+          id,
+          format: "metadata",
+          metadataHeaders: ["From", "Subject"],
+        });
+
+        const headers = response.data.payload?.headers;
+
+        return {
+          emailId: response.data.id ?? id,
+          sender: getHeader(headers, "From") || "Unknown sender",
+          subject: getHeader(headers, "Subject") || "(No subject)",
+        };
+      })
+    );
+
+    for (const result of settledMessages) {
+      if (result.status === "fulfilled") {
+        snapshots.push(result.value);
+      }
+    }
+
+    if (batchIndex < batches.length - 1) {
+      await sleep(DEFAULT_GMAIL_BULK_BATCH_DELAY_MS);
+    }
+  }
+
+  return snapshots;
 }
 
 function decodeBase64Url(value: string): string {

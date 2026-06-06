@@ -6,6 +6,7 @@ import {
   retry,
 } from "./retry";
 import { executorHandlers } from "./handlers";
+import type { CommitActionType } from "../commits/types";
 import type {
   ActionType,
   BatchExecutionResult,
@@ -78,7 +79,19 @@ function reconcileBatchResult(
   };
 }
 
-export async function executeAction(
+function mapExecutorActionToCommitAction(action: ActionType): CommitActionType {
+  if (action === "archive") {
+    return "archive";
+  }
+
+  if (action === "delete") {
+    return "delete";
+  }
+
+  return "export";
+}
+
+async function executeActionInternal(
   input: ExecuteActionInput,
   options: ExecuteActionOptions = {}
 ): Promise<ExecuteActionResult> {
@@ -177,4 +190,52 @@ export async function executeAction(
     failedIds,
     durationMs,
   };
+}
+
+export async function executeAction(
+  input: ExecuteActionInput,
+  options: ExecuteActionOptions = {}
+): Promise<ExecuteActionResult> {
+  const { commit, ...executorInput } = input;
+
+  if (!commit) {
+    return executeActionInternal(executorInput, options);
+  }
+
+  const { recordExecutionCommit } = await import("../commits/commit-service");
+
+  const recorded = await recordExecutionCommit({
+    userId: commit.userId,
+    accessToken: commit.accessToken,
+    emailIds: input.emailIds,
+    source: commit.source,
+    actionType: commit.actionType ?? mapExecutorActionToCommitAction(input.action),
+    title: commit.title,
+    automationId: commit.automationId ?? null,
+    metadata: {
+      action: input.action,
+      ...(commit.metadata ?? {}),
+    },
+    execute: async () => {
+      const result = await executeActionInternal(executorInput, options);
+
+      return {
+        success: result.success,
+        emailsProcessed: result.total,
+        emailsSucceeded: result.succeeded,
+        emailsFailed: result.failed,
+        metadata: {
+          executorResult: result,
+        },
+      };
+    },
+  });
+
+  const result = recorded.result.metadata?.executorResult;
+
+  if (!result || typeof result !== "object") {
+    throw new Error("Executor result was not recorded correctly.");
+  }
+
+  return result as ExecuteActionResult;
 }

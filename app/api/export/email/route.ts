@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { recordExecutionCommit } from "@/lib/commits/commit-service";
+import { requireSessionUserId } from "@/lib/commits/session";
 import { getAttachment, getEmailDetails } from "@/lib/gmail";
 import { buildSingleEmailZip, getSingleExportFileName } from "@/lib/export";
 import type { DownloadedAttachment } from "@/types/email";
@@ -28,33 +30,66 @@ export async function POST(request: Request) {
   }
 
   try {
-    const email = await getEmailDetails(session.accessToken, body.messageId);
+    const userId = requireSessionUserId(session);
+    let zip: Uint8Array | null = null;
+    let fileName = "email-export.zip";
 
-    const attachments: DownloadedAttachment[] = await Promise.all(
-      email.attachments.map(async (attachment) => {
-        const data = await getAttachment(
+    await recordExecutionCommit({
+      userId,
+      accessToken: session.accessToken,
+      emailIds: [body.messageId],
+      source: "manual",
+      actionType: "export",
+      title: "Exported Email",
+      metadata: {
+        initiatedFrom: "export-email-api",
+      },
+      execute: async () => {
+        const email = await getEmailDetails(
           session.accessToken as string,
-          email.id,
-          attachment.attachmentId
+          body.messageId as string
         );
 
+        const attachments: DownloadedAttachment[] = await Promise.all(
+          email.attachments.map(async (attachment) => {
+            const data = await getAttachment(
+              session.accessToken as string,
+              email.id,
+              attachment.attachmentId
+            );
+
+            return {
+              ...attachment,
+              data,
+            };
+          })
+        );
+
+        zip = await buildSingleEmailZip(email, attachments);
+        fileName = getSingleExportFileName(email);
+
         return {
-          ...attachment,
-          data,
+          success: true,
+          emailsProcessed: 1,
+          emailsSucceeded: 1,
+          emailsFailed: 0,
         };
-      })
-    );
+      },
+    });
 
-    const zip = await buildSingleEmailZip(email, attachments);
-    const fileName = getSingleExportFileName(email);
+    const exportZip = zip as Uint8Array | null;
 
-    return new Response(zip, {
+    if (!exportZip) {
+      throw new Error("Failed to build email export.");
+    }
+
+    return new Response(exportZip, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
           fileName
         )}`,
-        "Content-Length": String(zip.length),
+        "Content-Length": String(exportZip.length),
       },
     });
   } catch (error) {

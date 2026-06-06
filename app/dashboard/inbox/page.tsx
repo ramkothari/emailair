@@ -2,6 +2,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { InboxWorkspace } from "@/components/InboxWorkspace";
 import { auth } from "@/lib/auth";
+import { recordExecutionCommit } from "@/lib/commits/commit-service";
+import { requireSessionUserId } from "@/lib/commits/session";
 import {
   archiveEmails,
   deleteEmails,
@@ -91,7 +93,30 @@ export default async function DashboardInboxPage() {
     }
 
     try {
-      await deleteEmails(currentSession.accessToken, ids);
+      const userId = requireSessionUserId(currentSession);
+
+      await recordExecutionCommit({
+        userId,
+        accessToken: currentSession.accessToken,
+        emailIds: ids,
+        source: "manual",
+        actionType: "delete",
+        title: "Deleted Inbox Emails",
+        metadata: {
+          initiatedFrom: "dashboard-inbox",
+        },
+        execute: async () => {
+          await deleteEmails(currentSession.accessToken as string, ids);
+
+          return {
+            success: true,
+            emailsProcessed: ids.length,
+            emailsSucceeded: ids.length,
+            emailsFailed: 0,
+          };
+        },
+      });
+
       revalidatePath("/dashboard");
       revalidatePath("/dashboard/search");
       revalidatePath("/dashboard/inbox");
@@ -130,7 +155,30 @@ export default async function DashboardInboxPage() {
     }
 
     try {
-      await archiveEmails(currentSession.accessToken, ids);
+      const userId = requireSessionUserId(currentSession);
+
+      await recordExecutionCommit({
+        userId,
+        accessToken: currentSession.accessToken,
+        emailIds: ids,
+        source: "manual",
+        actionType: "archive",
+        title: "Archived Inbox Emails",
+        metadata: {
+          initiatedFrom: "dashboard-inbox",
+        },
+        execute: async () => {
+          await archiveEmails(currentSession.accessToken as string, ids);
+
+          return {
+            success: true,
+            emailsProcessed: ids.length,
+            emailsSucceeded: ids.length,
+            emailsFailed: 0,
+          };
+        },
+      });
+
       revalidatePath("/dashboard");
       revalidatePath("/dashboard/search");
       revalidatePath("/dashboard/inbox");
