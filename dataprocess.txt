@@ -1,0 +1,990 @@
+EMAILAIR EXECUTION AND DATA-FLOW AUDIT
+
+Scope:
+- This document audits the current Emailair implementation only.
+- No implementation changes are proposed here.
+- All flows are based on repository files and current source code.
+
+==================================================
+SECTION 1
+APPLICATION ARCHITECTURE
+==================================================
+
+High-level runtime path:
+
+User
+  -> UI Layer
+  -> Server Actions / API Routes
+  -> Services
+  -> Executor where applicable
+  -> Gmail API
+  -> Database where applicable
+  -> Response / React render
+
+Relevant application files:
+
+UI and routes:
+- app/dashboard/layout.tsx
+- app/dashboard/DashboardShell.tsx
+- app/dashboard/DashboardNav.tsx
+- app/dashboard/inbox/page.tsx
+- app/dashboard/search/page.tsx
+- app/dashboard/analytics/page.tsx
+- app/dashboard/automation/page.tsx
+- app/dashboard/commits/page.tsx
+- components/InboxWorkspace.tsx
+- components/InboxSearchHeader.tsx
+- components/EmailTable.tsx
+- components/EmailViewer.tsx
+- components/ExportSelectedButton.tsx
+- components/InboxAIAnalysisModal.tsx
+- components/AIAnalysisCard.tsx
+- components/AIActionCard.tsx
+- components/FilterPreview.tsx
+- components/CommitGroup.tsx
+- components/CommitCard.tsx
+
+Server actions:
+- app/actions/inbox-actions.ts
+- app/actions/filter-actions.ts
+- app/actions/execution-actions.ts
+
+API routes:
+- app/api/ai/analyze-search/route.ts
+- app/api/export/email/route.ts
+- app/api/export/selected/route.ts
+- app/api/emails/[messageId]/route.ts
+- app/api/emails/[messageId]/attachments/[attachmentId]/route.ts
+- app/api/commits/route.ts
+- app/api/commits/[id]/route.ts
+- app/api/db-health/route.ts
+
+Services:
+- lib/auth.ts
+- lib/gmail.ts
+- lib/analytics.ts
+- lib/export.ts
+- lib/executor/executor.ts
+- lib/executor/handlers.ts
+- lib/executor/batch.ts
+- lib/executor/retry.ts
+- lib/executor/progress.ts
+- lib/commits/commit-service.ts
+- lib/commits/session.ts
+- lib/ai/index.ts
+- lib/ai/controllers/analysis-controller.ts
+- lib/ai/controllers/risk-controller.ts
+- lib/ai/controllers/summary-controller.ts
+- lib/ai/provider-factory.ts
+- lib/ai/prompts.ts
+
+Database:
+- db/client.ts
+- db/schema.ts
+- drizzle/0000_blue_storm.sql
+- drizzle/meta/_journal.json
+- drizzle/meta/0000_snapshot.json
+
+Core data stores:
+- Gmail: source of truth for email messages.
+- local libSQL/Turso database: executions, commits, commit_items, automations.
+- In-memory server maps: analytics cache and AI analysis caches.
+- Browser state: selected email IDs, displayed email rows, modal state.
+- Browser localStorage: saved automation task drafts in lib/tasks/task-storage.ts.
+
+==================================================
+SECTION 2
+INBOX LOAD FLOW
+==================================================
+
+Flow: Opening Inbox
+
+File chain:
+
+app/dashboard/inbox/page.tsx
+  -> auth() from lib/auth.ts
+  -> getRecentEmailsPage() from lib/gmail.ts
+  -> Gmail users.messages.list
+  -> Gmail users.messages.get for each listed message
+  -> InboxWorkspace
+  -> EmailTable
+  -> rendered rows
+
+Entry point:
+- app/dashboard/inbox/page.tsx default export DashboardInboxPage().
+
+Authentication:
+- DashboardInboxPage() calls auth().
+- If session.accessToken is missing, it redirects to "/".
+
+Gmail API calls:
+- getRecentEmailsPage(session.accessToken, 50) in lib/gmail.ts.
+- Gmail list call:
+  users.messages.list({
+    userId: "me",
+    maxResults: 50,
+    labelIds: ["INBOX"],
+    pageToken
+  })
+- For each returned message ref, Gmail detail call:
+  users.messages.get({
+    userId: "me",
+    id: message.id,
+    format: "full"
+  })
+
+Request count:
+- 1 Gmail list request.
+- Up to 50 Gmail get requests.
+- The get requests are fired in parallel by Promise.all.
+
+Data transformations:
+- lib/gmail.ts getRecentEmailsPage() maps each Gmail message to Email:
+  - id from message.id
+  - sender from From header
+  - subject from Subject header
+  - date from Date header
+  - snippet from Gmail snippet
+- app/dashboard/inbox/page.tsx stores:
+  - emails
+  - nextPageToken
+  - loadError
+- components/InboxWorkspace.tsx receives initial emails and page token.
+- InboxWorkspace derives emailMetadata for AI modal from current email rows:
+  sender, subject, snippet, date.
+
+Sorting:
+- No explicit local sorting is performed.
+- Display order follows Gmail users.messages.list result order.
+
+Filtering:
+- Initial inbox load filters only by Gmail labelIds ["INBOX"].
+- Local UI selection filters selectedIds against current visible emails when email list changes.
+
+Rendering:
+- InboxWorkspace renders InboxSearchHeader, EmailTable, EmailViewer when selected, and InboxAIAnalysisModal when open.
+- EmailTable renders selected count, action buttons, table headers, rows, load more button.
+
+Load More flow:
+
+components/InboxWorkspace.tsx handleLoadMore()
+  -> app/actions/inbox-actions.ts loadInboxPageAction(nextPageToken)
+  -> auth()
+  -> getRecentEmailsPage(accessToken, 50, nextPageToken)
+  -> Gmail list + parallel Gmail get
+  -> append returned emails to current state
+
+Load More request count:
+- 1 Gmail list request.
+- Up to 50 Gmail get requests in parallel.
+
+==================================================
+SECTION 3
+ANALYTICS FLOW
+==================================================
+
+Flow: Opening Analytics page
+
+File chain:
+
+app/dashboard/analytics/page.tsx
+  -> auth()
+  -> getEmailAnalytics() from lib/analytics.ts
+  -> aggregateEmailMetadata()
+  -> aggregateAttachmentMetadata()
+  -> Gmail users.messages.list
+  -> Gmail users.messages.get
+  -> analytics transformations
+  -> Analytics components render
+
+Entry point:
+- app/dashboard/analytics/page.tsx default export DashboardAnalyticsPage().
+
+Authentication:
+- Calls auth().
+- Redirects to "/" if session.accessToken is missing.
+
+Scan limit:
+- DEFAULT_ANALYTICS_SCAN_LIMIT = 1,000 in app/dashboard/analytics/page.tsx.
+- MAX_ANALYTICS_SCAN_LIMIT = 100,000.
+- Can be configured by ANALYTICS_EMAIL_LIMIT.
+
+Service:
+- getEmailAnalytics(accessToken, userKey, limit, { forceRefresh }).
+- userKey is session.user?.email ?? "unknown-user".
+
+Caching behavior:
+- lib/analytics.ts uses analyticsCache Map.
+- Cache key: analytics:${userKey}:${limit}.
+- TTL: 15 minutes.
+- If cache exists and forceRefresh is false, getEmailAnalytics returns cached result and does not call Gmail.
+- Refresh button uses query param refresh; page passes forceRefresh: Boolean(params?.refresh).
+
+Parallel operations:
+- getEmailAnalytics runs:
+  Promise.all([
+    aggregateEmailMetadata(accessToken, safeLimit),
+    aggregateAttachmentMetadata(accessToken, safeLimit)
+  ])
+- Metadata scan and attachment scan run in parallel.
+
+aggregateEmailMetadata():
+- Uses Gmail users.messages.list with:
+  - userId: "me"
+  - maxResults up to 500 per page
+  - labelIds: ["INBOX"]
+- For each page, uses mapWithConcurrency with DETAIL_CONCURRENCY = 20.
+- For each message, calls users.messages.get with:
+  - format: "metadata"
+  - metadataHeaders: From, Subject, Date, List-Unsubscribe, List-Id, Precedence
+- It accumulates:
+  - totalScanned
+  - unreadEmails
+  - starredEmails
+  - importantEmails
+  - categoryCounts
+  - ageCounts
+  - senderCounts
+  - newsletterSenderCounts
+  - monthCounts
+  - weekdayCounts
+
+aggregateAttachmentMetadata():
+- Uses Gmail users.messages.list with:
+  - userId: "me"
+  - maxResults up to 500 per page
+  - labelIds: ["INBOX"]
+  - q: "has:attachment"
+- For each attachment-message page, uses mapWithConcurrency with DETAIL_CONCURRENCY = 20.
+- For each message, calls users.messages.get with:
+  - format: "metadata"
+  - metadataHeaders: []
+- It accumulates:
+  - emailsWithAttachments
+  - largestMessageSizeEstimate
+  - estimatedAttachmentMessageBytes
+
+Gmail request estimate:
+- For N inbox emails scanned:
+  - Email metadata scan: ceil(N / 500) list requests + N get requests.
+- For A attachment emails scanned:
+  - Attachment scan: ceil(A / 500) list requests + A get requests.
+- Because both aggregate functions run in parallel, total Gmail request count is:
+  ceil(N / 500) + N + ceil(A / 500) + A.
+
+Sequential operations:
+- Pagination loops are sequential per aggregate function.
+- Within each page, message detail requests are concurrent with a cap of 20.
+- Final transformations are synchronous Map/array operations.
+
+Expensive calculations:
+- Gmail metadata fetches dominate.
+- Sender/category/age/newsletter/month/weekday aggregations are O(N).
+- Sorting top senders/newsletters sorts map entries by count.
+
+Rendering:
+- AnalyticsRefreshControls
+- AnalyticsOverview
+- CategoryBreakdown
+- AttachmentInsights
+- EmailAgeDistribution
+- SenderInsights
+- ActivityTrends
+- NewsletterInsights
+
+==================================================
+SECTION 4
+ARCHIVE FLOW
+==================================================
+
+Flow A: Inbox EmailTable selected archive
+
+UI path:
+
+components/EmailTable.tsx
+  -> selectedIds state
+  -> Archive Selected button
+  -> handleArchiveSelected()
+  -> executeSelectedInBatches(ids, "archive")
+  -> onArchiveSelected(batch)
+
+Server action path:
+
+app/dashboard/inbox/page.tsx
+  -> archiveSelectedEmails(ids)
+  -> auth()
+  -> recordExecutionCommit()
+  -> archiveEmails()
+  -> revalidatePath()
+  -> response to EmailTable
+
+Gmail mutation path:
+
+recordExecutionCommit()
+  -> getEmailsMetadataByIds(accessToken, ids)
+  -> Gmail users.messages.get metadata for each id before mutation
+  -> insert executions row status running
+  -> execute callback
+  -> archiveEmails(accessToken, ids)
+  -> processGmailIdsInBatches()
+  -> Gmail users.messages.modify removeLabelIds ["INBOX"]
+  -> update execution row
+  -> createCommit()
+  -> insert commits row
+  -> insert commit_items rows
+
+Batching:
+- EmailTable batches selected IDs into groups of 25 with 350ms delay.
+- Each batch calls the server action separately.
+- Each server action creates a separate execution and commit.
+- archiveEmails also batches IDs internally with GMAIL_BULK_BATCH_SIZE default 25 and GMAIL_BULK_BATCH_DELAY_MS default 350.
+- For a 25-ID UI batch, archiveEmails creates one Gmail mutation batch.
+
+Gmail requests per UI batch of B IDs:
+- B metadata get requests in getEmailsMetadataByIds, grouped by batches of 25 and executed with Promise.allSettled.
+- B Gmail modify requests in archiveEmails, grouped by batches of 25 and executed with Promise.allSettled.
+- Total: 2B Gmail requests for archive mutation path, excluding post-refresh inbox reload.
+
+Database operations per successful batch:
+- Insert executions.
+- Update executions.
+- Insert commits.
+- Insert commit_items rows for affected emails.
+- getCommit() reads the created commit.
+- loadItemsForCommitIds() reads commit_items for the created commit.
+
+Post-success refresh:
+- EmailTable calls router.refresh().
+- DashboardInboxPage reloads inbox, causing getRecentEmailsPage again:
+  1 Gmail list + up to 50 Gmail full get requests.
+
+Flow B: FilterPreview archive
+
+UI path:
+
+components/FilterPreview.tsx
+  -> requestExecution("archive", ids)
+  -> ExecutionConfirmationModal
+  -> confirmExecution()
+  -> executeBulkAction({ action: "archive", emailIds: batch })
+
+Server action path:
+
+app/actions/execution-actions.ts
+  -> executeBulkAction()
+  -> auth()
+  -> requireSessionUserId()
+  -> executeAction({ action, emailIds, context, commit })
+
+Executor path:
+
+lib/executor/executor.ts executeAction()
+  -> if commit exists, dynamic import recordExecutionCommit()
+  -> recordExecutionCommit snapshots Gmail metadata
+  -> executeActionInternal()
+  -> validateInput()
+  -> normalizeEmailIds()
+  -> createBatches(DEFAULT_BATCH_SIZE 25)
+  -> retry(handler)
+  -> executorHandlers.archive
+  -> archiveEmails()
+
+Commit creation:
+- recordExecutionCommit creates execution first.
+- Commit is created only if result.success is true, emailsSucceeded > 0, and emailsFailed === 0.
+
+Flow C: filter-actions archiveFilterAction
+
+app/actions/filter-actions.ts archiveFilterAction()
+  -> auth()
+  -> recordExecutionCommit()
+  -> archiveEmails()
+  -> revalidatePath()
+  -> searchEmails(filter, 50)
+  -> return refreshed search result
+
+This flow bypasses lib/executor/executor.ts and calls Gmail directly.
+
+==================================================
+SECTION 5
+DELETE FLOW
+==================================================
+
+Flow A: Inbox EmailTable selected delete
+
+UI path:
+
+components/EmailTable.tsx
+  -> selectedIds state
+  -> Delete Selected button
+  -> handleDeleteSelected()
+  -> executeSelectedInBatches(ids, "delete")
+  -> onDeleteSelected(batch)
+
+Server action path:
+
+app/dashboard/inbox/page.tsx
+  -> deleteSelectedEmails(ids)
+  -> auth()
+  -> recordExecutionCommit()
+  -> deleteEmails()
+  -> revalidatePath()
+  -> response to EmailTable
+
+Gmail mutation path:
+
+recordExecutionCommit()
+  -> getEmailsMetadataByIds(accessToken, ids)
+  -> Gmail users.messages.get metadata before mutation
+  -> insert executions row status running
+  -> execute callback
+  -> deleteEmails(accessToken, ids)
+  -> processGmailIdsInBatches()
+  -> Gmail users.messages.trash for each id
+  -> update execution row
+  -> create commit and commit_items if success
+
+Gmail requests per UI batch of B IDs:
+- B metadata get requests.
+- B Gmail trash requests.
+- Total: 2B Gmail requests for delete mutation path, excluding post-refresh inbox reload.
+
+Database operations:
+- Same pattern as archive.
+
+Post-success refresh:
+- router.refresh() triggers inbox reload:
+  1 Gmail list + up to 50 Gmail full get requests.
+
+Flow B: FilterPreview delete
+
+components/FilterPreview.tsx
+  -> executeBulkAction({ action: "delete", emailIds: batch })
+  -> app/actions/execution-actions.ts
+  -> lib/executor/executor.ts
+  -> executorHandlers.delete
+  -> deleteEmails()
+  -> Gmail users.messages.trash
+  -> commit service
+
+Flow C: filter-actions deleteFilterAction
+
+app/actions/filter-actions.ts deleteFilterAction()
+  -> auth()
+  -> recordExecutionCommit()
+  -> deleteEmails()
+  -> revalidatePath()
+  -> searchEmails(filter, 50)
+  -> return refreshed search result
+
+This flow bypasses lib/executor/executor.ts and calls Gmail directly.
+
+==================================================
+SECTION 6
+EXPORT FLOW
+==================================================
+
+Flow A: Single email export
+
+UI path:
+
+components/EmailViewer.tsx
+  -> fetch /api/emails/[messageId] to view full email
+  -> Export Email button
+  -> POST /api/export/email with messageId
+
+API path:
+
+app/api/export/email/route.ts
+  -> auth()
+  -> validate body.messageId
+  -> requireSessionUserId()
+  -> recordExecutionCommit()
+  -> execute callback:
+       getEmailDetails()
+       getAttachment() for each attachment
+       buildSingleEmailZip()
+  -> return ZIP Response
+
+Gmail calls:
+- Commit snapshot before export:
+  1 users.messages.get metadata for messageId.
+- getEmailDetails:
+  1 users.messages.get format full.
+- Attachments:
+  one users.messages.attachments.get per attachment.
+
+ZIP generation:
+- lib/export.ts buildSingleEmailZip()
+  -> createEmailPdf()
+  -> pdf-lib PDFDocument.create()
+  -> embed Helvetica fonts
+  -> write subject, headers, body, attachment list
+  -> JSZip file email.pdf
+  -> JSZip attachments folder
+  -> zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
+
+Response:
+- Response body is ZIP buffer.
+- Headers:
+  Content-Type application/zip
+  Content-Disposition encoded file name
+  Content-Length zip length
+
+Database:
+- recordExecutionCommit writes execution.
+- On success, writes commit and commit_items.
+
+Flow B: Selected email export
+
+UI path:
+
+components/ExportSelectedButton.tsx
+  -> POST /api/export/selected with messageIds
+
+API path:
+
+app/api/export/selected/route.ts
+  -> auth()
+  -> validate messageIds array
+  -> requireSessionUserId()
+  -> recordExecutionCommit()
+  -> execute callback:
+       Promise.all over messageIds
+         getEmailDetails()
+         Promise.all over each email attachments
+           getAttachment()
+       buildMultipleEmailsZip()
+  -> return ZIP Response
+
+Gmail calls for E selected emails with total T attachments:
+- E metadata get requests for commit snapshot.
+- E full message get requests for export.
+- T attachment get requests.
+- Export route uses Promise.all over selected messages.
+- Attachment downloads per email also use Promise.all.
+
+ZIP generation:
+- buildMultipleEmailsZip() loops sequentially over exportItems.
+- For each item:
+  - creates folder name from date + subject.
+  - createEmailPdf() is awaited sequentially inside loop.
+  - adds attachments.
+  - tracks total size, max 250 MB.
+- Final zip.generateAsync compresses the complete ZIP.
+
+Limits:
+- buildMultipleEmailsZip() rejects if emails.length > 50.
+- app/actions/execution-actions.ts has ACTION_LIMITS.download = 50, but selected export route does not use executeAction.
+
+==================================================
+SECTION 7
+AI ANALYSIS FLOW
+==================================================
+
+Flow: Analyze Results button
+
+Primary inbox modal path:
+
+components/EmailTable.tsx
+  -> Analyze Results button
+  -> onAnalyzeResults()
+  -> components/InboxWorkspace.tsx setIsAiOpen(true)
+  -> InboxAIAnalysisModal receives emails={emailMetadata.slice(0, 100)}
+
+AI API path:
+
+components/AIAnalysisCard.tsx
+  -> analyzeResults()
+  -> fetch POST /api/ai/analyze-search
+  -> body { emails }
+
+API route:
+
+app/api/ai/analyze-search/route.ts
+  -> parse request.json()
+  -> validate body is object
+  -> validate emails array
+  -> validate each email has sender, subject, snippet, date strings
+  -> totalProvided = emails.length
+  -> emailsToAnalyze = first 50 emails
+  -> sanitize sender/subject/snippet/date length
+  -> ProviderFactory.getCurrentProvider()
+  -> payloadSizeBytes calculated
+  -> create hash from sender|subject|date
+  -> check analyzeCache with TTL 1 hour
+  -> convert email metadata to emailBodies
+  -> Promise.all([
+       analyzeEmails(emailBodies),
+       detectRisk(emailBodies),
+       summarizeEmails(emailBodies)
+     ])
+  -> cache response
+  -> return analysis, risk, summary
+
+Data source:
+- The AI route receives already-loaded UI email metadata.
+- It does not fetch Gmail directly.
+- It does not fetch email bodies.
+- It uses Gmail snippets available from inbox load/search where present.
+
+LLM/API calls:
+- Three AI calls per uncached Analyze click:
+  1. analyzeEmails()
+  2. detectRisk()
+  3. summarizeEmails()
+- They run in parallel via Promise.all.
+- One failed promise causes the whole analysis request to fail.
+
+Caching:
+- app/api/ai/analyze-search/route.ts has analyzeCache Map.
+- Key is SHA-256 hash of sender, subject, date for first 50 sanitized emails.
+- TTL is 1 hour.
+- Cached response returns immediately without LLM calls.
+
+Provider:
+- ProviderFactory.getCurrentProvider() reports selected provider.
+- Actual controllers live in lib/ai/controllers/*.
+- Prompt construction lives in lib/ai/prompts.ts.
+
+AI action execution:
+- InboxAIAnalysisModal exposes Archive/Move to Trash actions.
+- InboxWorkspace executeAiAction(action) maps all currently displayed email IDs.
+- It calls onArchiveSelected(ids) or onDeleteSelected(ids).
+- That reuses the same archive/delete paths described above.
+
+==================================================
+SECTION 8
+COMMIT SYSTEM FLOW
+==================================================
+
+Core service:
+
+lib/commits/commit-service.ts
+
+Main function:
+- recordExecutionCommit(input)
+
+Execution -> Commit flow:
+
+recordExecutionCommit()
+  -> generate executionId
+  -> startedAt = now
+  -> getEmailsMetadataByIds(accessToken, input.emailIds)
+  -> getDb()
+  -> insert executions row with status "running"
+  -> execute input.execute callback
+  -> calculate duration
+  -> getExecutionCounts()
+  -> update executions row to completed or failed
+  -> if success, emailsSucceeded > 0, emailsFailed == 0:
+       createCommit()
+     else:
+       return executionId with commitId null
+
+createCommit():
+  -> generate commitId
+  -> transaction:
+       insert commits row
+       insert commit_items rows if affectedEmails length > 0
+  -> getCommit(userId, commitId)
+  -> return Commit object
+
+Failure behavior:
+- If execute callback throws:
+  - update executions row to failed.
+  - set emailsSucceeded 0.
+  - set emailsFailed input.emailIds.length.
+  - include error in metadata.
+  - rethrow error.
+- No completed commit is created.
+
+Tables used:
+- executions: every attempted recorded execution.
+- commits: successful non-empty executions only.
+- commit_items: affected email snapshots for successful commits.
+- automations: schema exists but current runtime writes are not present in code.
+
+Commit page loading:
+
+app/dashboard/commits/page.tsx
+  -> auth()
+  -> getSessionUserId()
+  -> getCommits(userId, { limit: 50 })
+  -> groupByDate(commits)
+  -> CommitGroup
+  -> CommitCard
+
+getCommits():
+- Queries commits for userId and status completed.
+- If cursor present, also filters createdAt < cursor.
+- Orders by createdAt descending.
+- limit = normalized limit + 1 for cursor detection.
+- loadItemsForCommitIds() queries commit_items with inArray(commitItems.commitId, commitIds).
+- Maps rows to Commit objects.
+
+getCommit():
+- Queries single commit by id and userId.
+- Loads commit_items for that commit id.
+
+API routes:
+- GET /api/commits:
+  auth -> getSessionUserId -> getCommits -> JSON result.
+- GET /api/commits/[id]:
+  auth -> getSessionUserId -> getCommit -> JSON commit or 404.
+
+==================================================
+SECTION 9
+DATABASE FLOW
+==================================================
+
+Database client:
+- db/client.ts reads TURSO_DATABASE_URL.
+- Creates @libsql/client.
+- Creates Drizzle db from drizzle-orm/libsql.
+- commit-service imports db lazily through getDb(), so normal page imports do not immediately require DB connection.
+
+Table: automations
+- Defined in db/schema.ts.
+- Columns: id, userId, name, description, enabled, schedule, configuration, status, createdAt, updatedAt.
+- Writes in current code: none found.
+- Reads in current code: none found.
+- Current automation task storage still uses browser localStorage in lib/tasks/task-storage.ts.
+
+Table: executions
+- Defined in db/schema.ts.
+- Written by recordExecutionCommit():
+  - insert at start with status running.
+  - update after success/failure.
+- Read by current code:
+  - no direct execution history page currently reads executions.
+  - commits relate to executions via executionId.
+- When:
+  - archive/delete/export recorded action starts.
+  - failed actions still update this table.
+
+Table: commits
+- Defined in db/schema.ts.
+- Written by createCommit() after successful non-empty execution.
+- Read by:
+  - getCommits()
+  - getCommit()
+  - app/dashboard/commits/page.tsx through getCommits()
+  - app/api/commits/route.ts through getCommits()
+  - app/api/commits/[id]/route.ts through getCommit()
+- When:
+  - successful archive/delete/export execution completes with no failed emails.
+
+Table: commit_items
+- Defined in db/schema.ts.
+- Written by createCommit() for affected email snapshots.
+- Read by:
+  - loadItemsForCommitIds()
+  - getCommits()
+  - getCommit()
+- When:
+  - successful commit is created.
+  - rows are grouped by sender in CommitCard.
+
+Health route:
+- app/api/db-health/route.ts connects to tursoClient.
+- Executes select 1.
+- Queries sqlite_master for required tables.
+- Returns tableCount, tables, missingTables.
+
+==================================================
+SECTION 10
+PERFORMANCE AUDIT
+==================================================
+
+Inbox load:
+- Gmail requests:
+  - 1 list.
+  - up to 50 full get requests.
+- Database requests:
+  - none.
+- Sequential bottlenecks:
+  - list request must complete before detail gets start.
+- Parallel operations:
+  - all detail gets run with Promise.all.
+- Latency contributors:
+  - Gmail list latency.
+  - up to 50 full Gmail message fetches.
+  - full format fetch includes more payload than metadata-only.
+
+Analytics:
+- Gmail requests:
+  - metadata scan: ceil(N / 500) list + N get.
+  - attachment scan: ceil(A / 500) list + A get.
+  - N up to ANALYTICS_EMAIL_LIMIT, default 1,000.
+  - A is attachment-message count up to limit.
+- Database requests:
+  - none.
+- Sequential bottlenecks:
+  - pagination loops.
+  - each page waits for all detail requests before next page.
+- Parallel operations:
+  - metadata scan and attachment scan run concurrently.
+  - detail requests per page run with concurrency 20.
+- Latency contributors:
+  - high Gmail request count.
+  - two separate scans over inbox and attachment query.
+  - metadata aggregation and sender sorting after fetch.
+- Caching:
+  - 15-minute in-memory cache by user and limit.
+
+Archive:
+- Gmail requests per B emails:
+  - B metadata get requests before mutation.
+  - B Gmail modify requests.
+  - post-refresh inbox reload: 1 list + up to 50 full get requests.
+- Database requests per successful batch:
+  - insert execution.
+  - update execution.
+  - insert commit.
+  - insert commit_items rows.
+  - read commit.
+  - read commit_items by commit id.
+- Sequential bottlenecks:
+  - metadata snapshot completes before mutation starts.
+  - execution insert completes before callback mutation.
+  - UI batches are processed sequentially with 350ms delay.
+  - Gmail mutation batches inside archiveEmails are sequential with 350ms delay between internal batches.
+- Parallel operations:
+  - metadata snapshot within a batch uses Promise.allSettled.
+  - Gmail modify calls within each internal batch use Promise.allSettled.
+- Latency contributors:
+  - doubled Gmail calls from snapshot + mutation.
+  - nested batching when UI already sends 25 and Gmail also batches.
+  - router.refresh reloads inbox from Gmail.
+
+Delete:
+- Same as archive, except mutation uses Gmail users.messages.trash.
+- Gmail requests per B emails:
+  - B metadata get requests.
+  - B trash requests.
+  - post-refresh inbox reload.
+- Database and bottleneck profile matches archive.
+
+Export:
+- Single export Gmail requests:
+  - 1 metadata get for commit snapshot.
+  - 1 full message get.
+  - one attachment get per attachment.
+- Selected export Gmail requests for E emails and T attachments:
+  - E metadata gets for commit snapshot.
+  - E full message gets.
+  - T attachment gets.
+- Database requests:
+  - same commit-service pattern as archive/delete on success.
+- Sequential bottlenecks:
+  - snapshot completes before export generation.
+  - selected export waits for all full email and attachment fetches before ZIP generation.
+  - buildMultipleEmailsZip creates PDFs sequentially in a for loop.
+  - ZIP compression happens after all items are assembled.
+- Parallel operations:
+  - selected message get/exportItems are fetched with Promise.all.
+  - attachments per email are fetched with Promise.all.
+- Latency contributors:
+  - large attachment downloads.
+  - PDF generation.
+  - ZIP compression.
+  - memory usage for holding all export items and ZIP buffer.
+
+AI Analysis:
+- Gmail requests:
+  - none inside /api/ai/analyze-search.
+  - uses already loaded UI metadata/snippets.
+- Database requests:
+  - none.
+- LLM/API calls:
+  - 3 calls per uncached request.
+  - analyzeEmails, detectRisk, summarizeEmails.
+- Sequential bottlenecks:
+  - request validation and cache hash before LLM calls.
+  - response waits for all three LLM promises.
+- Parallel operations:
+  - three LLM calls run in Promise.all.
+- Latency contributors:
+  - slowest LLM call controls total latency.
+  - one failure fails entire analysis.
+  - payload includes up to first 50 emails.
+- Caching:
+  - one-hour in-memory cache by SHA-256 hash.
+
+==================================================
+SECTION 11
+BOTTLENECK RANKING
+==================================================
+
+1. Analytics Gmail scanning
+
+Evidence:
+- lib/analytics.ts scans up to 1,000 emails by default and up to 100,000 configured.
+- It performs an inbox metadata scan and an attachment scan in parallel.
+- For 1,000 emails plus attachment emails, request count is approximately:
+  ceil(1000 / 500) + 1000 + ceil(A / 500) + A.
+- Detail fetch concurrency is capped at 20, but page loops remain sequential.
+
+2. Inbox load and refresh full-message fetching
+
+Evidence:
+- getRecentEmailsPage() fetches initial inbox using Gmail list plus up to 50 users.messages.get calls with format "full".
+- EmailTable archive/delete success calls router.refresh(), triggering the inbox load flow again.
+- Mutation flows therefore frequently end with 1 list + up to 50 full get requests.
+
+3. Export ZIP generation and attachment loading
+
+Evidence:
+- Selected export fetches all selected full email details and attachments.
+- buildMultipleEmailsZip() generates PDFs sequentially for each email.
+- It holds generated PDFs, attachments, and final ZIP buffer in memory before returning Response.
+
+==================================================
+SECTION 12
+OPTIMIZATION OPPORTUNITIES
+==================================================
+
+This section identifies opportunities only. No implementation recommendations are made here.
+
+Redundant Gmail calls:
+- Archive/delete commit logging snapshots metadata for each ID, then mutation calls Gmail for each ID.
+- After successful archive/delete, router.refresh reloads inbox with up to 50 full Gmail get requests.
+- Export snapshots metadata, then getEmailDetails fetches the full same message again.
+- Selected export does E metadata gets and E full gets for the same selected messages.
+
+Repeated metadata fetches:
+- Commit snapshot uses getEmailsMetadataByIds().
+- Export full details include headers that could also provide sender/subject, but current commit flow fetches metadata separately before execute callback.
+- Search results already include sender/subject/date, but commit service fetches snapshots again from Gmail by ID.
+
+Missing caching:
+- Inbox load has no server cache.
+- Gmail search preview has no cache.
+- Export has no cache.
+- Commit page reads from DB each request.
+
+Sequential processing:
+- Analytics pagination is sequential.
+- UI archive/delete batches run sequentially with delay.
+- Gmail internal mutation batches run sequentially with delay.
+- buildMultipleEmailsZip() PDF generation runs sequentially over selected emails.
+
+Unnecessary refreshes:
+- EmailTable archive/delete calls router.refresh() after successful batched execution.
+- filter-actions archive/delete revalidates dashboard paths and then immediately calls searchEmails(filter, 50) to refresh results.
+
+Expensive analytics calculations:
+- Analytics performs two independent Gmail scans: general inbox metadata and has:attachment metadata.
+- Sender and newsletter maps grow with unique senders.
+- Sorting sender/newsletter entries happens after scan.
+
+Database overhead:
+- recordExecutionCommit reads the newly created commit after inserting it.
+- createCommit() loads commit_items after insert to return a full Commit object, even when callers do not use the returned commit details.
+- Commit page loads commits and commit_items in two DB queries, which is efficient compared with per-commit item queries, but still reads item details for every visible commit.
+
+Executor coverage observation:
+- Some archive/delete flows use lib/executor/executor.ts through app/actions/execution-actions.ts.
+- Other archive/delete flows call archiveEmails/deleteEmails directly inside app/dashboard/inbox/page.tsx and app/actions/filter-actions.ts.
+- All current mutation paths are wrapped by recordExecutionCommit, but executor behavior is not the single mutation path.
