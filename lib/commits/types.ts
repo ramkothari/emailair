@@ -6,6 +6,7 @@ export type CommitActionType =
   | "archive"
   | "delete"
   | "export"
+  | "mark_read"
   | "unsubscribe"
   | "ai_cleanup";
 

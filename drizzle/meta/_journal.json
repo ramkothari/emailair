@@ -8,6 +8,13 @@
       "when": 1780731881877,
       "tag": "0000_blue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780812600000,
+      "tag": "0001_automation_v1",
+      "breakpoints": true
     }
   ]
 }

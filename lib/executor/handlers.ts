@@ -1,4 +1,4 @@
-import { archiveEmails, deleteEmails } from "@/lib/gmail";
+import { archiveEmails, deleteEmails, markEmailsRead } from "@/lib/gmail";
 import type {
   ActionType,
   BatchActionHandler,
@@ -43,9 +43,18 @@ const downloadHandler: BatchActionHandler = async ({ emailIds }) => {
   );
 };
 
+const markReadHandler: BatchActionHandler = async ({ emailIds, context }) => {
+  const accessToken = getAccessToken(context);
+
+  await markEmailsRead(accessToken, emailIds);
+
+  return allSucceeded(emailIds);
+};
+
 export const executorHandlers: Record<ActionType, BatchActionHandler> = {
   archive: archiveHandler,
   delete: deleteHandler,
   download: downloadHandler,
   export: downloadHandler,
+  mark_read: markReadHandler,
 };

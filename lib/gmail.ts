@@ -524,6 +524,67 @@ export async function archiveEmails(
   });
 }
 
+export async function markEmailsRead(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const gmail = getGmailClient(accessToken);
+  const batchSize = getPositiveIntegerEnv(
+    "GMAIL_MARK_READ_BATCH_SIZE",
+    DEFAULT_GMAIL_BULK_BATCH_SIZE
+  );
+  const batchDelayMs = getPositiveIntegerEnv(
+    "GMAIL_MARK_READ_BATCH_DELAY_MS",
+    DEFAULT_GMAIL_BULK_BATCH_DELAY_MS
+  );
+  const batches = createBatches(ids, batchSize);
+  const startedAt = Date.now();
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex];
+    const batchStartedAt = Date.now();
+
+    await withGmailRetry(
+      "gmail.messages.batchModify.markRead",
+      () =>
+        gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: batch,
+            removeLabelIds: ["UNREAD"],
+          },
+        }),
+      {
+        batchIndex: batchIndex + 1,
+        emailCount: batch.length,
+      }
+    );
+
+    console.info("[gmail]", {
+      operation: "gmail.messages.batchModify.markRead",
+      batchIndex: batchIndex + 1,
+      totalBatches: batches.length,
+      emailCount: batch.length,
+      durationMs: Date.now() - batchStartedAt,
+    });
+
+    if (batchIndex < batches.length - 1) {
+      await sleep(batchDelayMs);
+    }
+  }
+
+  console.info("[gmail]", {
+    operation: "gmail.messages.batchModify.markRead",
+    emailCount: ids.length,
+    batchCount: batches.length,
+    durationMs: Date.now() - startedAt,
+  });
+}
+
 function formatGmailSearchValue(value: string): string {
   const trimmed = value.trim();
 
@@ -658,6 +719,24 @@ export async function searchEmails(
     totalMatches,
     emails,
   };
+}
+
+export async function searchEmailIds(
+  accessToken: string,
+  query: string,
+  limit: number = 100
+): Promise<string[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 1000);
+  const gmail = getGmailClient(accessToken);
+  const response = await gmail.users.messages.list({
+    userId: "me",
+    q: query,
+    maxResults: safeLimit,
+  });
+
+  return (response.data.messages ?? [])
+    .map((message) => message.id)
+    .filter((id): id is string => Boolean(id));
 }
 
 export function getGmailClient(accessToken: string) {

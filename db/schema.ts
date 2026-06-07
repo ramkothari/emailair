@@ -14,6 +14,20 @@ export const automations = sqliteTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    scheduleType: text("schedule_type", {
+      enum: ["once", "daily", "weekly", "monthly", "interval"],
+    }),
+    scheduleValue: text("schedule_value", { mode: "json" }).$type<
+      Record<string, unknown>
+    >(),
+    conditionJson: text("condition_json", { mode: "json" }).$type<
+      Record<string, unknown>
+    >(),
+    actionJson: text("action_json", { mode: "json" }).$type<
+      Record<string, unknown>
+    >(),
+    lastRunAt: text("last_run_at"),
+    nextRunAt: text("next_run_at"),
     status: text("status", {
       enum: ["pending", "running", "completed", "failed"],
     })
@@ -28,6 +42,34 @@ export const automations = sqliteTable(
       table.userId,
       table.enabled
     ),
+    dueIdx: index("idx_automations_due").on(table.enabled, table.nextRunAt),
+  })
+);
+
+export const automationRuns = sqliteTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey(),
+    automationId: text("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+    status: text("status", {
+      enum: ["pending", "running", "completed", "failed"],
+    }).notNull(),
+    emailsMatched: integer("emails_matched").notNull().default(0),
+    emailsProcessed: integer("emails_processed").notNull().default(0),
+    executionId: text("execution_id"),
+    commitId: text("commit_id"),
+    error: text("error"),
+  },
+  (table) => ({
+    automationIdx: index("idx_automation_runs_automation").on(
+      table.automationId
+    ),
+    startedIdx: index("idx_automation_runs_started").on(table.startedAt),
+    statusIdx: index("idx_automation_runs_status").on(table.status),
   })
 );
 
@@ -76,7 +118,7 @@ export const commits = sqliteTable(
       enum: ["manual", "automation", "ai_agent", "system"],
     }).notNull(),
     actionType: text("action_type", {
-      enum: ["archive", "delete", "export", "unsubscribe", "ai_cleanup"],
+      enum: ["archive", "delete", "export", "mark_read", "unsubscribe", "ai_cleanup"],
     }).notNull(),
     title: text("title").notNull(),
     emailCount: integer("email_count").notNull(),
@@ -121,6 +163,17 @@ export const commitItems = sqliteTable(
 
 export const executionsRelations = relations(executions, ({ many }) => ({
   commits: many(commits),
+}));
+
+export const automationsRelations = relations(automations, ({ many }) => ({
+  runs: many(automationRuns),
+}));
+
+export const automationRunsRelations = relations(automationRuns, ({ one }) => ({
+  automation: one(automations, {
+    fields: [automationRuns.automationId],
+    references: [automations.id],
+  }),
 }));
 
 export const commitsRelations = relations(commits, ({ one, many }) => ({

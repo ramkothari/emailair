@@ -3,7 +3,7 @@ import type {
   CommitSource,
 } from "@/lib/commits/types";
 
-export type ActionType = "delete" | "archive" | "download" | "export";
+export type ActionType = "delete" | "archive" | "download" | "export" | "mark_read";
 
 export type ExecuteActionContext = {
   accessToken?: string;
@@ -34,6 +34,8 @@ export type ExecuteActionResult = {
   failed: number;
   failedIds: string[];
   durationMs: number;
+  executionId?: string | null;
+  commitId?: string | null;
 };
 
 export type BatchExecutionResult = {

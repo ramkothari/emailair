@@ -1,5 +1,81 @@
-import { SaveTaskButton } from "@/components/SaveTaskButton";
+import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { requireSessionUserId } from "@/lib/commits/session";
+import { getUserAutomations } from "@/lib/automations/run-automation";
+import { AutomationCard } from "./automation-card";
 
-export default function DashboardAutomationPage() {
-  return <SaveTaskButton query="" currentAction="archive" />;
+export default async function DashboardAutomationPage() {
+  const session = await auth();
+  const userId = requireSessionUserId(session);
+  const automationItems = await getUserAutomations(userId);
+  const enabledCount = automationItems.filter((item) => item.enabled).length;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-[#F5F5F5]">
+            Automation
+          </h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-[#A1A1AA]">
+            Rules find matching Gmail messages, then run the existing executor
+            and commit pipeline.
+          </p>
+        </div>
+
+        <Link
+          href="/dashboard/automation/new"
+          className="inline-flex h-8 items-center rounded-full bg-gray-950 px-3 text-xs font-medium text-white transition hover:bg-gray-800 dark:bg-[#F5F5F5] dark:text-[#18181B]"
+        >
+          New Automation
+        </Link>
+      </header>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 dark:border-[#3F3F46] dark:bg-[#232326]">
+          <p className="text-xs text-gray-500 dark:text-[#A1A1AA]">
+            Total Automations
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-[#F5F5F5]">
+            {automationItems.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 dark:border-[#3F3F46] dark:bg-[#232326]">
+          <p className="text-xs text-gray-500 dark:text-[#A1A1AA]">Enabled</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-[#F5F5F5]">
+            {enabledCount}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 dark:border-[#3F3F46] dark:bg-[#232326]">
+          <p className="text-xs text-gray-500 dark:text-[#A1A1AA]">
+            Audit Trail
+          </p>
+          <Link
+            href="/dashboard/commits"
+            className="mt-2 inline-flex text-sm font-medium text-[#D97706]"
+          >
+            View Commits
+          </Link>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        {automationItems.length === 0 ? (
+          <div className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-8 text-center dark:border-[#3F3F46] dark:bg-[#232326]">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-[#F5F5F5]">
+              No automations yet
+            </h2>
+            <p className="mt-2 text-sm text-gray-600 dark:text-[#A1A1AA]">
+              Create a rule, preview matching emails, then run it through the
+              shared executor.
+            </p>
+          </div>
+        ) : (
+          automationItems.map((automation) => (
+            <AutomationCard key={automation.id} automation={automation} />
+          ))
+        )}
+      </section>
+    </div>
+  );
 }

@@ -16,7 +16,13 @@ import type {
   ExecutorProgress,
 } from "./types";
 
-const SUPPORTED_ACTIONS: ActionType[] = ["delete", "archive", "download", "export"];
+const SUPPORTED_ACTIONS: ActionType[] = [
+  "delete",
+  "archive",
+  "download",
+  "export",
+  "mark_read",
+];
 const DEFAULT_BATCH_DELAY_MS = 350;
 
 function sleep(ms: number): Promise<void> {
@@ -86,6 +92,10 @@ function mapExecutorActionToCommitAction(action: ActionType): CommitActionType {
 
   if (action === "delete") {
     return "delete";
+  }
+
+  if (action === "mark_read") {
+    return "mark_read";
   }
 
   return "export";
@@ -189,6 +199,8 @@ async function executeActionInternal(
     failed,
     failedIds,
     durationMs,
+    executionId: null,
+    commitId: null,
   };
 }
 
@@ -238,5 +250,9 @@ export async function executeAction(
     throw new Error("Executor result was not recorded correctly.");
   }
 
-  return result as ExecuteActionResult;
+  return {
+    ...(result as ExecuteActionResult),
+    executionId: recorded.executionId,
+    commitId: recorded.commitId,
+  };
 }
