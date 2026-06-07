@@ -13,7 +13,7 @@ type EmailTableProps = {
   heading?: string;
   description?: string;
   onViewEmail?: (id: string) => void;
-  onAnalyzeResults?: () => void;
+  onAnalyzeResults?: (ids: string[]) => void;
   onLoadMore?: () => Promise<void>;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -423,15 +423,15 @@ export function EmailTable({
           {onAnalyzeResults ? (
             <button
               type="button"
-              onClick={onAnalyzeResults}
-              disabled={emails.length === 0 || isExecuting}
+              onClick={() => onAnalyzeResults(selectedIds)}
+              disabled={!hasSelection || isExecuting}
               className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
-                emails.length > 0
+                hasSelection
                   ? "border-[#60A5FA]/40 bg-black/[0.03] text-[#2563EB] hover:bg-[#60A5FA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
                   : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
               }`}
             >
-              Analyze Results
+              Analyze Selected ({selectedCount})
             </button>
           ) : null}
 

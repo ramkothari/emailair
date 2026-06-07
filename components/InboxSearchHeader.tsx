@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { BackgroundGradient } from "@/components/ui/background-gradient";
 
 export type InboxSearchFormValues = {
   query: string;
@@ -14,6 +15,7 @@ export type InboxSearchFormValues = {
 type InboxSearchHeaderProps = {
   initialValues?: Partial<InboxSearchFormValues>;
   isSearching?: boolean;
+  isSearchActive?: boolean;
   resultCount?: number;
   onSearch: (values: InboxSearchFormValues) => void | Promise<void>;
   onReset?: () => void;
@@ -31,6 +33,7 @@ const DEFAULT_VALUES: InboxSearchFormValues = {
 export function InboxSearchHeader({
   initialValues,
   isSearching = false,
+  isSearchActive = false,
   resultCount,
   onSearch,
   onReset,
@@ -45,10 +48,19 @@ export function InboxSearchHeader({
     key: Key,
     value: InboxSearchFormValues[Key]
   ) {
+    const nextValue =
+      key === "query" && typeof value === "string" && value.trim() === ""
+        ? ""
+        : value;
+
     setValues((current) => ({
       ...current,
-      [key]: value,
+      [key]: nextValue,
     }));
+
+    if (key === "query" && typeof value === "string" && value.trim() === "") {
+      onReset?.();
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -61,30 +73,44 @@ export function InboxSearchHeader({
     onReset?.();
   }
 
+  function clearQuery() {
+    setValues((current) => ({
+      ...current,
+      query: "",
+    }));
+    onReset?.();
+  }
+
   return (
     <section className="mb-8">
-      <form onSubmit={handleSubmit} className="mx-auto max-w-5xl">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={values.query}
-              onChange={(event) => updateValue("query", event.target.value)}
-              placeholder="Search subject or keywords..."
-              className="h-14 w-full rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-6 pr-12 text-base text-gray-900 shadow-[0_12px_32px_rgba(0,0,0,0.08)] outline-none transition placeholder:text-gray-400 focus:border-[#60A5FA] focus:ring-4 focus:ring-[#60A5FA]/15 dark:border-[#3F3F46] dark:bg-[#18181B] dark:text-[#F5F5F5] dark:shadow-[0_0_34px_rgba(96,165,250,0.13)] dark:placeholder:text-[#71717A] dark:focus:border-[#60A5FA] dark:focus:ring-[#60A5FA]/20"
-            />
+      <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+        <div className="flex items-center justify-center gap-3">
+          <BackgroundGradient active={isSearchActive} className="w-full max-w-2xl">
+            <div className="relative">
+              <input
+                type="text"
+                value={values.query}
+                onChange={(event) => updateValue("query", event.target.value)}
+                placeholder="Search subject or keywords..."
+                className={`h-14 w-full rounded-full border bg-white px-6 pr-12 text-base text-gray-900 shadow-[0_12px_32px_rgba(0,0,0,0.08)] outline-none transition placeholder:text-gray-400 dark:bg-[#18181B] dark:text-[#F5F5F5] dark:placeholder:text-[#71717A] ${
+                  isSearchActive
+                    ? "border-[#D97706] focus:border-[#D97706] dark:border-[#D97706] dark:shadow-none"
+                    : "border-[rgba(0,0,0,0.08)] focus:border-[#60A5FA] focus:ring-4 focus:ring-[#60A5FA]/15 dark:border-[#3F3F46] dark:shadow-[0_0_34px_rgba(96,165,250,0.13)] dark:focus:border-[#60A5FA] dark:focus:ring-[#60A5FA]/20"
+                }`}
+              />
 
-            {values.query ? (
-              <button
-                type="button"
-                onClick={() => updateValue("query", "")}
-                className="absolute right-4 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-lg leading-none text-gray-400 transition hover:bg-[#F3F3F3] hover:text-gray-700 dark:text-[#71717A] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
-                aria-label="Clear search"
-              >
-                ✕
-              </button>
-            ) : null}
-          </div>
+              {values.query ? (
+                <button
+                  type="button"
+                  onClick={clearQuery}
+                  className="absolute right-4 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-base leading-none text-gray-400 transition hover:bg-[#F3F3F3] hover:text-gray-700 dark:text-[#71717A] dark:hover:bg-[#2A2A2E] dark:hover:text-[#F5F5F5]"
+                  aria-label="Clear search"
+                >
+                  {"\u2715"}
+                </button>
+              ) : null}
+            </div>
+          </BackgroundGradient>
 
           <button
             type="button"
@@ -93,7 +119,7 @@ export function InboxSearchHeader({
             aria-expanded={advancedOpen}
             aria-label="Advanced search"
           >
-            ⋮
+            {"\u22EE"}
           </button>
         </div>
 

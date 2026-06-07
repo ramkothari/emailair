@@ -79,7 +79,7 @@ export function AIActionCard({
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl bg-gray-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Total Emails Found
+            Selected Emails
           </dt>
           <dd className="mt-1 text-lg font-semibold text-gray-900">
             {totalEmailsFound}
@@ -175,7 +175,7 @@ export function AIActionCard({
           disabled={isExecuting || totalEmailsFound === 0 || !onArchiveSearchResults}
           className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Archive Results
+          Archive Selected
         </button>
 
         <button
@@ -184,7 +184,7 @@ export function AIActionCard({
           disabled={isExecuting || totalEmailsFound === 0 || !onMoveSearchResultsToTrash}
           className="inline-flex h-8 items-center rounded-full bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Move Results To Trash
+          Move Selected To Trash
         </button>
 
         <button
@@ -193,7 +193,7 @@ export function AIActionCard({
           title="Download execution is deferred."
           className="inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Download Search Results
+          Download Selected
         </button>
       </div>
     </section>

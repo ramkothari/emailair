@@ -63,19 +63,27 @@ export function InboxWorkspace({
   const [error, setError] = useState<string | null>(loadError);
   const [viewingEmailId, setViewingEmailId] = useState<string | null>(null);
   const [isAiOpen, setIsAiOpen] = useState(false);
+  const [aiSelectedIds, setAiSelectedIds] = useState<string[]>([]);
   const [isExecutingAiAction, setIsExecutingAiAction] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
 
-  const emailMetadata = useMemo(
+  const selectedEmailMetadata = useMemo(
     () =>
-      emails.map((email) => ({
-        sender: email.sender || "Unknown sender",
-        subject: email.subject || "(No subject)",
-        snippet: email.snippet || "",
-        date: email.date || "Unknown date",
-      })),
-    [emails]
+      aiSelectedIds
+        .map((id) => emails.find((email) => email.id === id))
+        .filter((email): email is Email => Boolean(email))
+        .map((email) => ({
+          sender: email.sender || "Unknown sender",
+          subject: email.subject || "(No subject)",
+          snippet: email.snippet || "",
+          date: email.date || "Unknown date",
+        })),
+    [aiSelectedIds, emails]
+  );
+  const aiEmailsForAnalysis = useMemo(
+    () => selectedEmailMetadata.slice(0, 100),
+    [selectedEmailMetadata]
   );
 
   function handleSearchResults(data: PreviewData, _filter: EmailFilter, nextMessage?: string) {
@@ -86,16 +94,34 @@ export function InboxWorkspace({
     setMessage(nextMessage ?? null);
     setError(null);
     setIsAiOpen(false);
+    setAiSelectedIds([]);
   }
 
-  function handleClearSearch() {
-    setEmails(initialEmails);
+  async function handleClearSearch() {
     setMode("latest");
-    setTotalMatches(initialEmails.length);
-    setNextPageToken(initialNextPageToken);
     setMessage(null);
-    setError(loadError);
+    setError(null);
     setIsAiOpen(false);
+    setAiSelectedIds([]);
+    setIsSearching(true);
+
+    try {
+      const result = await loadInboxPageAction();
+
+      if (!result.ok) {
+        setEmails(initialEmails);
+        setTotalMatches(initialEmails.length);
+        setNextPageToken(initialNextPageToken);
+        setError(result.error);
+        return;
+      }
+
+      setEmails(result.data.emails);
+      setTotalMatches(result.data.emails.length);
+      setNextPageToken(result.data.nextPageToken);
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   function buildFilterFromSearchValues(
@@ -200,7 +226,9 @@ export function InboxWorkspace({
   }
 
   async function executeAiAction(action: "archive" | "delete") {
-    const ids = emails.map((email) => email.id);
+    const ids = aiSelectedIds.filter((id) =>
+      emails.some((email) => email.id === id)
+    );
 
     if (ids.length === 0) {
       return;
@@ -218,6 +246,7 @@ export function InboxWorkspace({
 
       if (result.success) {
         setIsAiOpen(false);
+        setAiSelectedIds([]);
       }
     } finally {
       setIsExecutingAiAction(false);
@@ -233,6 +262,7 @@ export function InboxWorkspace({
     <>
       <InboxSearchHeader
         isSearching={isSearching}
+        isSearchActive={mode === "search"}
         resultCount={emails.length}
         onSearch={handleCompactSearch}
         onReset={handleClearSearch}
@@ -266,11 +296,14 @@ export function InboxWorkspace({
           heading="Inbox Emails"
           description={tableDescription}
           onViewEmail={setViewingEmailId}
-          onAnalyzeResults={() => setIsAiOpen(true)}
           onLoadMore={mode === "latest" ? handleLoadMore : undefined}
           hasMore={Boolean(nextPageToken)}
           isLoadingMore={isLoadingMore}
           showExportSelected
+          onAnalyzeResults={(ids) => {
+            setAiSelectedIds(ids);
+            setIsAiOpen(true);
+          }}
         />
       </div>
 
@@ -283,8 +316,8 @@ export function InboxWorkspace({
 
       <InboxAIAnalysisModal
         open={isAiOpen}
-        emails={emailMetadata.slice(0, 100)}
-        totalEmailsFound={totalMatches}
+        emails={aiEmailsForAnalysis}
+        totalEmailsFound={selectedEmailMetadata.length}
         isExecuting={isExecutingAiAction}
         onClose={() => setIsAiOpen(false)}
         onArchiveResults={() => {

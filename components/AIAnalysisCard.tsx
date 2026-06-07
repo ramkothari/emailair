@@ -53,7 +53,7 @@ function AIAnalysisSkeleton() {
     <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 dark:border-[#3F3F46] dark:bg-[#2A2A2E]">
       <div className="space-y-3">
         <p className="text-sm font-semibold text-blue-900 dark:text-[#F5F5F5]">
-          Analyzing Results...
+          Analyzing Selected Emails...
         </p>
         <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Generating Summary...</p>
         <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Detecting Risks...</p>
@@ -159,7 +159,7 @@ export function AIAnalysisCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisSignature, autoAnalyze]);
 
-  if (emails.length === 0) {
+  if (emails.length === 0 && !showHeader) {
     return null;
   }
 
@@ -170,24 +170,22 @@ export function AIAnalysisCard({
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-[#F5F5F5]">AI Analysis</h3>
             <p className="mt-1 text-sm text-gray-600 dark:text-[#A1A1AA]">
-              Analyze visible search results before archiving or deleting.
+              Analyze selected emails before archiving or deleting.
             </p>
           </div>
 
-          {emails.length > 0 ? (
-            <button
-              type="button"
-              onClick={analyzeResults}
-              disabled={isAnalyzing}
-              className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
-            >
-              {isAnalyzing
-                ? "Analyzing..."
-                : result
-                  ? "Refresh Analysis"
-                  : "Analyze Results"}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={analyzeResults}
+            disabled={isAnalyzing || emails.length === 0}
+            className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F5F5F5] dark:text-[#18181B] dark:hover:bg-white"
+          >
+            {isAnalyzing
+              ? "Analyzing..."
+              : result
+                ? `Refresh Selected (${emails.length})`
+                : `Analyze Selected (${emails.length})`}
+          </button>
         </div>
       ) : null}
 

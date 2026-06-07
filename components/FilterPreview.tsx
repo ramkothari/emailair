@@ -91,29 +91,28 @@ export function FilterPreview({
   } | null>(null);
 
   const emailIds = useMemo(() => emails.map((email) => email.id), [emails]);
-  const searchResultEmailIds = useMemo(
-    () => Array.from(new Set(emails.map((email) => email.id))),
-    [emails]
-  );
   const selectedCount = selectedIds.size;
   const hasEmails = emails.length > 0;
   const allSelected = hasEmails && selectedCount === emails.length;
   const riskLevel = analysisResult?.risk.riskLevel ?? null;
 
-  const emailMetadata: EmailMetadata[] = useMemo(
+  const selectedEmailMetadata: EmailMetadata[] = useMemo(
     () =>
-      emails.map((email) => ({
-        sender: email.sender || "Unknown sender",
-        subject: email.subject || "(No subject)",
-        snippet: email.snippet || "",
-        date: email.date || "Unknown date",
-      })),
-    [emails]
+      Array.from(selectedIds)
+        .map((id) => emails.find((email) => email.id === id))
+        .filter((email): email is Email => Boolean(email))
+        .map((email) => ({
+          sender: email.sender || "Unknown sender",
+          subject: email.subject || "(No subject)",
+          snippet: email.snippet || "",
+          date: email.date || "Unknown date",
+        })),
+    [emails, selectedIds]
   );
 
   useEffect(() => {
     setAnalysisResult(null);
-  }, [emailMetadata]);
+  }, [selectedEmailMetadata]);
 
   useEffect(() => {
     setSelectedIds((currentSelectedIds) => {
@@ -364,7 +363,7 @@ export function FilterPreview({
       </div>
 
       <AIAnalysisCard
-        emails={emailMetadata.slice(0, AI_ANALYSIS_EMAIL_LIMIT)}
+        emails={selectedEmailMetadata.slice(0, AI_ANALYSIS_EMAIL_LIMIT)}
         onAnalysisComplete={setAnalysisResult}
       />
 
@@ -373,15 +372,15 @@ export function FilterPreview({
           analysis={analysisResult.analysis}
           risk={analysisResult.risk}
           summary={analysisResult.summary}
-          totalEmailsFound={totalMatches}
+          totalEmailsFound={selectedCount}
           emailsAnalyzed={analysisResult.analyzedCount}
           analyzedAt={analysisResult.analyzedAt}
           isExecuting={isExecutingAction}
           onArchiveSearchResults={() =>
-            requestExecution("archive", searchResultEmailIds, riskLevel)
+            requestExecution("archive", Array.from(selectedIds), riskLevel)
           }
           onMoveSearchResultsToTrash={() =>
-            requestExecution("delete", searchResultEmailIds, riskLevel)
+            requestExecution("delete", Array.from(selectedIds), riskLevel)
           }
         />
       ) : null}
