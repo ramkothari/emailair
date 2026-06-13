@@ -1,4 +1,8 @@
-import { getEmailsMetadataByIds, searchEmailIds } from "@/lib/gmail";
+import {
+  getEmailsMetadataByIds,
+  searchEmailIds,
+  searchEmailIdsWithEstimate,
+} from "@/lib/gmail";
 import type {
   AutomationCondition,
   AutomationConditionJson,
@@ -138,11 +142,12 @@ export async function previewAutomationMatches(input: {
   limit: number;
 }): Promise<AutomationPreviewResult> {
   const query = buildAutomationGmailQuery(input.conditionJson);
-  const emailIds = await findMatchingEmailIds({
-    accessToken: input.accessToken,
-    conditionJson: input.conditionJson,
-    limit: input.limit,
-  });
+  const searchResult = await searchEmailIdsWithEstimate(
+    input.accessToken,
+    query,
+    input.limit
+  );
+  const emailIds = searchResult.ids;
   const sampleIds = emailIds.slice(0, DEFAULT_PREVIEW_SAMPLE_LIMIT);
   const snapshots = await getEmailsMetadataByIds(input.accessToken, sampleIds);
   const grouped = new Map<string, number>();
@@ -159,9 +164,14 @@ export async function previewAutomationMatches(input: {
 
   return {
     query,
-    count: emailIds.length,
+    count: searchResult.totalMatches,
+    totalMatches: searchResult.totalMatches,
     capped: emailIds.length >= input.limit,
     limit: input.limit,
     breakdown,
+    samples: snapshots.slice(0, 8).map((snapshot) => ({
+      sender: snapshot.sender,
+      subject: snapshot.subject,
+    })),
   };
 }

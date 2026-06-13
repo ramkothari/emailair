@@ -101,3 +101,47 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  context: {
+    params: Promise<{ automationId: string }>;
+  }
+) {
+  const session = await auth();
+
+  if (!session?.accessToken) {
+    return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  }
+
+  try {
+    const userId = requireSessionUserId(session);
+    const { automationId } = await context.params;
+    const existing = await getAutomationById({ automationId, userId });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Automation not found." },
+        { status: 404 }
+      );
+    }
+
+    await db
+      .delete(automations)
+      .where(
+        and(eq(automations.id, automationId), eq(automations.userId, userId))
+      );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete automation.",
+      },
+      { status: 500 }
+    );
+  }
+}

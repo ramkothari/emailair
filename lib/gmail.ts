@@ -726,6 +726,16 @@ export async function searchEmailIds(
   query: string,
   limit: number = 100
 ): Promise<string[]> {
+  const result = await searchEmailIdsWithEstimate(accessToken, query, limit);
+
+  return result.ids;
+}
+
+export async function searchEmailIdsWithEstimate(
+  accessToken: string,
+  query: string,
+  limit: number = 100
+): Promise<{ ids: string[]; totalMatches: number }> {
   const safeLimit = Math.min(Math.max(limit, 1), 1000);
   const gmail = getGmailClient(accessToken);
   const response = await gmail.users.messages.list({
@@ -733,10 +743,14 @@ export async function searchEmailIds(
     q: query,
     maxResults: safeLimit,
   });
-
-  return (response.data.messages ?? [])
+  const ids = (response.data.messages ?? [])
     .map((message) => message.id)
     .filter((id): id is string => Boolean(id));
+
+  return {
+    ids,
+    totalMatches: response.data.resultSizeEstimate ?? ids.length,
+  };
 }
 
 export function getGmailClient(accessToken: string) {

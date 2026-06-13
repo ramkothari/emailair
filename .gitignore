@@ -37,3 +37,13 @@ pnpm-debug.log*
 
 # local database
 local.db
+#
+# AI memory sidecar and generated knowledge artifacts
+#
+.ai-memory/
+.hydra/
+.hydra-cache/
+.memory/
+*.embeddings
+*.vectors
+*.index

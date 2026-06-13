@@ -133,8 +133,13 @@ export type AutomationPreviewResult = {
   count: number;
   capped: boolean;
   limit: number;
+  totalMatches: number;
   breakdown: Array<{
     label: string;
     count: number;
+  }>;
+  samples: Array<{
+    sender: string;
+    subject: string;
   }>;
 };

@@ -9,7 +9,13 @@
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:test": "node scripts/db-test.mjs"
+    "db:test": "node scripts/db-test.mjs",
+    "hydra:test": "node .ai-memory/test.ts",
+    "hydra:verify": "node .ai-memory/verify.ts",
+    "hydra:sync": "node .ai-memory/index.ts --remote",
+    "hydra:index": "node .ai-memory/index.ts",
+    "hydra:watch": "node .ai-memory/watcher.ts",
+    "hydra:search": "node .ai-memory/search.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
