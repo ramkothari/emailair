@@ -604,6 +604,10 @@ function formatGmailSearchValue(value: string): string {
 function buildGmailSearchQuery(filter: EmailFilter): string {
   const queryParts: string[] = [];
 
+  if (filter.query?.trim()) {
+    queryParts.push(filter.query.trim());
+  }
+
   if (filter.sender?.trim()) {
     queryParts.push(`from:${formatGmailSearchValue(filter.sender)}`);
   }
@@ -660,16 +664,62 @@ function mapGmailMessageToEmail(
     sender: getGmailHeaderForSearch(headers, "From") || "Unknown sender",
     subject: getGmailHeaderForSearch(headers, "Subject") || "(No Subject)",
     date: getGmailHeaderForSearch(headers, "Date") || "Unknown date",
+    snippet: message.snippet ?? undefined,
   };
+}
+
+async function countRemainingGmailSearchMatches(input: {
+  gmail: gmail_v1.Gmail;
+  query: string;
+  pageToken?: string | null;
+}): Promise<number> {
+  let count = 0;
+  let pageToken = input.pageToken ?? undefined;
+
+  while (pageToken) {
+    const response = await input.gmail.users.messages.list({
+      userId: "me",
+      q: input.query,
+      maxResults: 500,
+      pageToken,
+    });
+
+    count += response.data.messages?.length ?? 0;
+    pageToken = response.data.nextPageToken ?? undefined;
+  }
+
+  return count;
+}
+
+async function countAllGmailSearchMatches(input: {
+  gmail: gmail_v1.Gmail;
+  query: string;
+}): Promise<number> {
+  const firstPage = await input.gmail.users.messages.list({
+    userId: "me",
+    q: input.query,
+    maxResults: 500,
+  });
+
+  return (
+    (firstPage.data.messages?.length ?? 0) +
+    (await countRemainingGmailSearchMatches({
+      gmail: input.gmail,
+      query: input.query,
+      pageToken: firstPage.data.nextPageToken,
+    }))
+  );
 }
 
 export async function searchEmails(
   accessToken: string,
   filter: EmailFilter,
-  limit: number = 50
+  limit: number = 50,
+  pageToken?: string
 ): Promise<{
   totalMatches: number;
   emails: Email[];
+  nextPageToken?: string;
 }> {
   const safeLimit = Math.min(Math.max(limit, 1), 50);
   const query = buildGmailSearchQuery(filter);
@@ -688,15 +738,24 @@ export async function searchEmails(
     userId: "me",
     q: query,
     maxResults: safeLimit,
+    pageToken,
   });
 
   const messages = listResponse.data.messages ?? [];
-  const totalMatches = listResponse.data.resultSizeEstimate ?? messages.length;
+  const totalMatches = pageToken
+    ? await countAllGmailSearchMatches({ gmail, query })
+    : messages.length +
+      (await countRemainingGmailSearchMatches({
+        gmail,
+        query,
+        pageToken: listResponse.data.nextPageToken,
+      }));
 
   if (messages.length === 0) {
     return {
       totalMatches,
       emails: [],
+      nextPageToken: listResponse.data.nextPageToken ?? undefined,
     };
   }
 
@@ -718,6 +777,7 @@ export async function searchEmails(
   return {
     totalMatches,
     emails,
+    nextPageToken: listResponse.data.nextPageToken ?? undefined,
   };
 }
 

@@ -15,6 +15,7 @@ import type { EmailFilter } from "@/types/filter";
 type PreviewData = {
   totalMatches: number;
   emails: Email[];
+  nextPageToken?: string;
 };
 
 type FilterActionResult =
@@ -32,7 +33,10 @@ type InboxWorkspaceProps = {
   initialEmails: Email[];
   initialNextPageToken?: string;
   loadError?: string | null;
-  onPreview: (filter: EmailFilter) => Promise<FilterActionResult>;
+  onPreview: (
+    filter: EmailFilter,
+    pageToken?: string
+  ) => Promise<FilterActionResult>;
   onArchive: (
     filter: EmailFilter,
     emailIds: string[]
@@ -66,6 +70,8 @@ export function InboxWorkspace({
   const [aiSelectedIds, setAiSelectedIds] = useState<string[]>([]);
   const [isExecutingAiAction, setIsExecutingAiAction] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [activeSearchFilter, setActiveSearchFilter] =
+    useState<EmailFilter | null>(null);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
 
   const selectedEmailMetadata = useMemo(
@@ -74,6 +80,7 @@ export function InboxWorkspace({
         .map((id) => emails.find((email) => email.id === id))
         .filter((email): email is Email => Boolean(email))
         .map((email) => ({
+          id: email.id,
           sender: email.sender || "Unknown sender",
           subject: email.subject || "(No subject)",
           snippet: email.snippet || "",
@@ -90,7 +97,7 @@ export function InboxWorkspace({
     setEmails(data.emails);
     setMode("search");
     setTotalMatches(data.totalMatches);
-    setNextPageToken(undefined);
+    setNextPageToken(data.nextPageToken);
     setMessage(nextMessage ?? null);
     setError(null);
     setIsAiOpen(false);
@@ -103,6 +110,7 @@ export function InboxWorkspace({
     setError(null);
     setIsAiOpen(false);
     setAiSelectedIds([]);
+    setActiveSearchFilter(null);
     setIsSearching(true);
 
     try {
@@ -137,8 +145,12 @@ export function InboxWorkspace({
       filter.sender = trimmedSender;
     }
 
-    if (trimmedSubject || trimmedQuery) {
-      filter.subject = trimmedSubject || trimmedQuery;
+    if (trimmedQuery) {
+      filter.query = trimmedQuery;
+    }
+
+    if (trimmedSubject) {
+      filter.subject = trimmedSubject;
     }
 
     if (trimmedOlderThanDays) {
@@ -162,6 +174,7 @@ export function InboxWorkspace({
 
     const hasAnyFilter =
       Boolean(filter.sender) ||
+      Boolean(filter.query) ||
       Boolean(filter.subject) ||
       Boolean(filter.olderThanDays) ||
       Boolean(filter.hasAttachment);
@@ -194,6 +207,7 @@ export function InboxWorkspace({
         return;
       }
 
+      setActiveSearchFilter(filter);
       handleSearchResults(result.data, filter, result.message);
     } finally {
       setIsSearching(false);
@@ -201,12 +215,34 @@ export function InboxWorkspace({
   }
 
   async function handleLoadMore() {
-    if (!nextPageToken || mode !== "latest") {
+    if (!nextPageToken) {
+      return;
+    }
+
+    if (mode === "search" && !activeSearchFilter) {
       return;
     }
 
     startLoadMoreTransition(() => {
       void (async () => {
+        if (mode === "search" && activeSearchFilter) {
+          const result = await onPreview(activeSearchFilter, nextPageToken);
+
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
+
+          setEmails((currentEmails) => [
+            ...currentEmails,
+            ...result.data.emails,
+          ]);
+          setTotalMatches(result.data.totalMatches);
+          setNextPageToken(result.data.nextPageToken);
+          setError(null);
+          return;
+        }
+
         const result = await loadInboxPageAction(nextPageToken);
 
         if (!result.ok) {
@@ -225,8 +261,11 @@ export function InboxWorkspace({
     });
   }
 
-  async function executeAiAction(action: "archive" | "delete") {
-    const ids = aiSelectedIds.filter((id) =>
+  async function executeAiAction(
+    action: "archive" | "delete",
+    includedIds?: string[]
+  ) {
+    const ids = (includedIds ?? aiSelectedIds).filter((id) =>
       emails.some((email) => email.id === id)
     );
 
@@ -255,7 +294,7 @@ export function InboxWorkspace({
 
   const tableDescription =
     mode === "search"
-      ? `Showing ${emails.length} search result${emails.length === 1 ? "" : "s"}.`
+      ? `Showing ${emails.length.toLocaleString()} of ${totalMatches.toLocaleString()} matching email${totalMatches === 1 ? "" : "s"}.`
       : `Showing latest ${emails.length} inbox email${emails.length === 1 ? "" : "s"}.`;
 
   return (
@@ -263,7 +302,7 @@ export function InboxWorkspace({
       <InboxSearchHeader
         isSearching={isSearching}
         isSearchActive={mode === "search"}
-        resultCount={emails.length}
+        resultCount={mode === "search" ? totalMatches : emails.length}
         onSearch={handleCompactSearch}
         onReset={handleClearSearch}
       />
@@ -296,7 +335,7 @@ export function InboxWorkspace({
           heading="Inbox Emails"
           description={tableDescription}
           onViewEmail={setViewingEmailId}
-          onLoadMore={mode === "latest" ? handleLoadMore : undefined}
+          onLoadMore={handleLoadMore}
           hasMore={Boolean(nextPageToken)}
           isLoadingMore={isLoadingMore}
           showExportSelected
@@ -320,11 +359,11 @@ export function InboxWorkspace({
         totalEmailsFound={selectedEmailMetadata.length}
         isExecuting={isExecutingAiAction}
         onClose={() => setIsAiOpen(false)}
-        onArchiveResults={() => {
-          void executeAiAction("archive");
+        onArchiveResults={(includedIds) => {
+          void executeAiAction("archive", includedIds);
         }}
-        onMoveResultsToTrash={() => {
-          void executeAiAction("delete");
+        onMoveResultsToTrash={(includedIds) => {
+          void executeAiAction("delete", includedIds);
         }}
       />
     </>

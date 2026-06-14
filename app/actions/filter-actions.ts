@@ -18,6 +18,7 @@ export type FilterActionResult =
       data: {
         totalMatches: number;
         emails: Email[];
+        nextPageToken?: string;
       };
       message?: string;
     }
@@ -59,7 +60,8 @@ function getGmailErrorMessage(error: unknown): string {
 }
 
 export async function previewFilterAction(
-  filter: EmailFilter
+  filter: EmailFilter,
+  pageToken?: string
 ): Promise<FilterActionResult> {
   const currentSession = await auth();
 

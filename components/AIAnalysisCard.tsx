@@ -1,9 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AIEmailBreakdown } from "@/components/AIEmailBreakdown";
-import { AIRiskBadge } from "@/components/AIRiskBadge";
-import { AIWarningsList } from "@/components/AIWarningsList";
 import type { EmailMetadata } from "@/lib/ai";
 import type {
   AnalysisResult,
@@ -55,8 +52,8 @@ function AIAnalysisSkeleton() {
         <p className="text-sm font-semibold text-blue-900 dark:text-[#F5F5F5]">
           Analyzing Selected Emails...
         </p>
-        <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Generating Summary...</p>
-        <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Detecting Risks...</p>
+        <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Summarizing inbox...</p>
+        <p className="text-sm text-blue-800 dark:text-[#A1A1AA]">Finding protected emails...</p>
 
         <div className="mt-4 space-y-2">
           <div className="h-4 w-3/4 animate-pulse rounded bg-blue-200 dark:bg-[#3F3F46]" />
@@ -66,6 +63,68 @@ function AIAnalysisSkeleton() {
       </div>
     </div>
   );
+}
+
+function cleanSender(sender: string) {
+  const name = sender.split("<")[0]?.trim().replace(/^"|"$/g, "");
+  const email = sender.match(/<([^>]+)>/)?.[1] ?? sender;
+  const domain = email.includes("@") ? email.split("@").pop() : null;
+
+  return name || domain || sender || "Unknown sender";
+}
+
+function inferCategory(email: EmailMetadata) {
+  const text = `${email.sender} ${email.subject} ${email.snippet}`.toLowerCase();
+
+  if (text.includes("github")) return "GitHub Notifications";
+  if (text.includes("product hunt")) return "Product Updates";
+  if (text.includes("openai") || text.includes("ai ")) return "AI Newsletters";
+  if (text.includes("payment") || text.includes("invoice") || text.includes("receipt")) {
+    return "Payment Notifications";
+  }
+  if (text.includes("digest") || text.includes("newsletter")) return "News Digests";
+  if (text.includes("linkedin")) return "LinkedIn Updates";
+  return "Routine Updates";
+}
+
+function isProtectedEmail(email: EmailMetadata) {
+  const text = `${email.sender} ${email.subject} ${email.snippet}`.toLowerCase();
+  const protectedTerms = [
+    "payment",
+    "failed",
+    "invoice",
+    "receipt",
+    "bill",
+    "interview",
+    "contract",
+    "legal",
+    "tax",
+    "security",
+    "recovery",
+    "suspension",
+    "domain renewal",
+    "bank",
+  ];
+  const routineTerms = ["newsletter", "digest", "promotion", "marketing", "github issue"];
+
+  return (
+    protectedTerms.some((term) => text.includes(term)) &&
+    !routineTerms.some((term) => text.includes(term))
+  );
+}
+
+function getSenderBreakdown(emails: EmailMetadata[]) {
+  const counts = new Map<string, number>();
+
+  emails.forEach((email) => {
+    const sender = cleanSender(email.sender);
+    counts.set(sender, (counts.get(sender) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([sender, count]) => ({ sender, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
 }
 
 export function AIAnalysisCard({
@@ -88,6 +147,15 @@ export function AIAnalysisCard({
       )
       .join("||");
   }, [emails]);
+  const categories = useMemo(
+    () => Array.from(new Set(emails.map(inferCategory))).slice(0, 8),
+    [emails]
+  );
+  const senderBreakdown = useMemo(() => getSenderBreakdown(emails), [emails]);
+  const protectedEmails = useMemo(
+    () => emails.filter(isProtectedEmail).slice(0, 5),
+    [emails]
+  );
 
   async function analyzeResults() {
     if (isRequestInFlightRef.current) {
@@ -237,11 +305,70 @@ export function AIAnalysisCard({
             </div>
           </div>
 
-          <AIRiskBadge risk={result.risk} />
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-[#F5F5F5]">
+              Email Categories
+            </h4>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <span
+                  key={category}
+                  className="rounded-full bg-[#F3F3F3] px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-[#2A2A2E] dark:text-[#D4D4D8]"
+                >
+                  {category}
+                </span>
+              ))}
+            </div>
+          </div>
 
-          <AIEmailBreakdown analysis={result.analysis} />
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-[#F5F5F5]">
+              Senders
+            </h4>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {senderBreakdown.map((sender) => (
+                <div
+                  key={sender.sender}
+                  className="flex justify-between rounded-xl border border-[rgba(0,0,0,0.08)] px-3 py-2 text-sm dark:border-[#3F3F46]"
+                >
+                  <span className="truncate text-gray-800 dark:text-[#D4D4D8]">
+                    {sender.sender}
+                  </span>
+                  <span className="ml-3 font-semibold text-[#D97706]">
+                    {sender.count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
 
-          <AIWarningsList risk={result.risk} />
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-[#F5F5F5]">
+              Protected Emails
+            </h4>
+            {protectedEmails.length > 0 ? (
+              <ul className="mt-2 space-y-2">
+                {protectedEmails.map((email) => (
+                  <li
+                    key={`${email.sender}-${email.subject}`}
+                    className="rounded-2xl border border-[#D97706]/40 bg-[#D97706]/10 px-3 py-2 text-sm"
+                  >
+                    <span className="block font-medium text-gray-900 dark:text-[#F5F5F5]">
+                      {email.subject}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-[#A1A1AA]">
+                      {cleanSender(email.sender)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-gray-600 dark:text-[#A1A1AA]">
+                No payment failures, invoices, contracts, legal notices, tax
+                documents, or security alerts detected.
+              </p>
+            )}
+          </div>
         </div>
       ) : null}
     </section>
