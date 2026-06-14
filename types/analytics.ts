@@ -60,6 +60,24 @@ export type NewsletterInsights = {
   topNewsletterSenders: NewsletterSender[];
 };
 
+export type ProtectedEmail = {
+  id: string;
+  sender: string;
+  subject: string;
+  reason: string;
+  timestamp: string;
+};
+
+export type AnalyticsProgress = {
+  status: "loading" | "ready" | "error";
+  sendersAnalyzed: boolean;
+  categoriesDetected: boolean;
+  protectedEmailsIdentified: boolean;
+  secondaryAnalyticsReady: boolean;
+  scannedEmailCount: number;
+  maxScanned: number;
+};
+
 export type CleanupCandidate = {
   title: string;
   count: number;
@@ -74,6 +92,8 @@ export type EmailAnalytics = {
   attachmentStats: AttachmentStats;
   activityTrends: ActivityTrends;
   newsletterInsights: NewsletterInsights;
+  protectedEmails: ProtectedEmail[];
+  progress: AnalyticsProgress;
   scannedEmailCount: number;
   maxScanned: number;
   scanComplete: boolean;

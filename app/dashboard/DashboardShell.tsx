@@ -10,7 +10,7 @@ type DashboardShellProps = {
 const navigationItems = [
   {
     href: "/dashboard/inbox",
-    label: "Inbox",
+    label: "Email",
   },
   {
     href: "/dashboard/analytics",

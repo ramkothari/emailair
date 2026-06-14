@@ -3,7 +3,12 @@ import { auth } from "@/lib/auth";
 import { recordExecutionCommit } from "@/lib/commits/commit-service";
 import { requireSessionUserId } from "@/lib/commits/session";
 import { executeAction } from "@/lib/executor/executor";
-import { getAttachment, getEmailDetails } from "@/lib/gmail";
+import {
+  deleteEmailsForever,
+  getAttachment,
+  getEmailDetails,
+  restoreEmailsToInbox,
+} from "@/lib/gmail";
 import { buildMultipleEmailsZip } from "@/lib/export";
 import type { ExecutionLifecycleEvent } from "@/lib/executor/events";
 import type { ActionType, ExecutorProgress } from "@/lib/executor/types";
@@ -14,10 +19,17 @@ export const runtime = "nodejs";
 const MAX_ACTION_EMAILS: Record<ManualExecutionAction, number> = {
   archive: 100,
   delete: 100,
+  restore_inbox: 100,
+  delete_forever: 100,
   export: 50,
 };
 
-type ManualExecutionAction = "archive" | "delete" | "export";
+type ManualExecutionAction =
+  | "archive"
+  | "delete"
+  | "restore_inbox"
+  | "delete_forever"
+  | "export";
 
 type ManualExecutionRequest = {
   action?: ManualExecutionAction;
@@ -54,6 +66,14 @@ function getCommitTitle(action: ManualExecutionAction): string {
 
   if (action === "delete") {
     return "Deleted Inbox Emails";
+  }
+
+  if (action === "restore_inbox") {
+    return "Restored Emails To Inbox";
+  }
+
+  if (action === "delete_forever") {
+    return "Deleted Trash Emails Forever";
   }
 
   return "Exported Selected Emails";
@@ -192,7 +212,13 @@ export async function POST(request: Request) {
   const action = body.action;
   const emailIds = normalizeEmailIds(body.emailIds);
 
-  if (action !== "archive" && action !== "delete" && action !== "export") {
+  if (
+    action !== "archive" &&
+    action !== "delete" &&
+    action !== "restore_inbox" &&
+    action !== "delete_forever" &&
+    action !== "export"
+  ) {
     return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
   }
 
@@ -304,6 +330,62 @@ export async function POST(request: Request) {
             );
             return;
           }
+
+          streamEvent(
+            controller,
+            encoder,
+            createEvent({
+              type: "completed",
+              executionId,
+              action,
+              total: emailIds.length,
+              processed,
+              failed,
+              startedAt,
+              affectedIds,
+              commitId: null,
+            })
+          );
+          return;
+        }
+
+        if (action === "restore_inbox" || action === "delete_forever") {
+          streamEvent(
+            controller,
+            encoder,
+            createEvent({
+              type: "started",
+              executionId,
+              action,
+              total: emailIds.length,
+              processed: 0,
+              failed: 0,
+              startedAt,
+            })
+          );
+
+          const mutation =
+            action === "restore_inbox"
+              ? restoreEmailsToInbox
+              : deleteEmailsForever;
+
+          await mutation(session.accessToken as string, emailIds);
+          processed = emailIds.length;
+          affectedIds = emailIds;
+
+          streamEvent(
+            controller,
+            encoder,
+            createEvent({
+              type: "progress",
+              executionId,
+              action,
+              total: emailIds.length,
+              processed,
+              failed,
+              startedAt,
+            })
+          );
 
           streamEvent(
             controller,

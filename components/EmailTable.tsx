@@ -5,10 +5,25 @@ import { ExportSelectedButton } from "@/components/ExportSelectedButton";
 import type { ExecutionLifecycleEvent } from "@/lib/executor/events";
 import type { Email, EmailActionResult } from "@/types/email";
 
+export type EmailTableMutationAction =
+  | "archive"
+  | "delete"
+  | "restore_inbox"
+  | "delete_forever";
+
+export type EmailTableActionConfig = {
+  action: EmailTableMutationAction;
+  label: string;
+  emptySelectionMessage: string;
+  failureMessage: string;
+  activeClassName: string;
+};
+
 type EmailTableProps = {
   emails: Email[];
-  onDeleteSelected: (ids: string[]) => Promise<EmailActionResult>;
-  onArchiveSelected: (ids: string[]) => Promise<EmailActionResult>;
+  onDeleteSelected?: (ids: string[]) => Promise<EmailActionResult>;
+  onArchiveSelected?: (ids: string[]) => Promise<EmailActionResult>;
+  actions?: EmailTableActionConfig[];
   onRemoveEmails?: (ids: string[]) => void;
   heading?: string;
   description?: string;
@@ -21,7 +36,7 @@ type EmailTableProps = {
 };
 
 type BulkActionProgress = {
-  action: "archive" | "delete" | "export";
+  action: EmailTableMutationAction | "export";
   completed: number;
   total: number;
   startedAt: number;
@@ -32,7 +47,7 @@ type BulkActionProgress = {
 type NotificationState =
   | {
       type: "loading";
-      action: "archive" | "delete" | "export";
+      action: EmailTableMutationAction | "export";
       completed: number;
       total: number;
       startedAt: number;
@@ -48,6 +63,7 @@ export function EmailTable({
   emails,
   onDeleteSelected,
   onArchiveSelected,
+  actions,
   onRemoveEmails,
   heading,
   description,
@@ -67,6 +83,26 @@ export function EmailTable({
   const [isPending, startTransition] = useTransition();
 
   const selectedCount = selectedIds.length;
+  const visibleActions =
+    actions ??
+    [
+      {
+        action: "delete" as const,
+        label: "Delete Selected",
+        emptySelectionMessage: "Select at least one email to delete.",
+        failureMessage: "Failed to delete selected emails.",
+        activeClassName:
+          "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+      },
+      {
+        action: "archive" as const,
+        label: "Archive Selected",
+        emptySelectionMessage: "Select at least one email to archive.",
+        failureMessage: "Failed to archive selected emails.",
+        activeClassName:
+          "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+      },
+    ];
   const allSelected = emails.length > 0 && selectedCount === emails.length;
   const hasSelection = selectedCount > 0;
   const isExecuting = bulkActionProgress !== null || isPending;
@@ -162,7 +198,7 @@ export function EmailTable({
 
   async function executeManualAction(
     ids: string[],
-    action: "archive" | "delete" | "export"
+    action: EmailTableMutationAction | "export"
   ): Promise<EmailActionResult> {
     const startedAt = Date.now();
     let latestEvent: ExecutionLifecycleEvent | null = null;
@@ -261,9 +297,17 @@ export function EmailTable({
               ? `Deleted ${latestEvent.affectedIds.length.toLocaleString()} email${
                   latestEvent.affectedIds.length === 1 ? "" : "s"
                 } \u2022 ${latestEvent.failed.toLocaleString()} failed`
-              : `Exported ${latestEvent.affectedIds.length.toLocaleString()} email${
-                  latestEvent.affectedIds.length === 1 ? "" : "s"
-                } \u2022 ${latestEvent.failed.toLocaleString()} failed`,
+              : action === "restore_inbox"
+                ? `Moved ${latestEvent.affectedIds.length.toLocaleString()} email${
+                    latestEvent.affectedIds.length === 1 ? "" : "s"
+                  } to Inbox \u2022 ${latestEvent.failed.toLocaleString()} failed`
+                : action === "delete_forever"
+                  ? `Deleted ${latestEvent.affectedIds.length.toLocaleString()} email${
+                      latestEvent.affectedIds.length === 1 ? "" : "s"
+                    } forever \u2022 ${latestEvent.failed.toLocaleString()} failed`
+                  : `Exported ${latestEvent.affectedIds.length.toLocaleString()} email${
+                      latestEvent.affectedIds.length === 1 ? "" : "s"
+                    } \u2022 ${latestEvent.failed.toLocaleString()} failed`,
       };
     }
 
@@ -275,7 +319,12 @@ export function EmailTable({
       downloadBase64File(latestEvent.fileBase64, latestEvent.fileName ?? "emails-export.zip");
     }
 
-    if (action === "archive" || action === "delete") {
+    if (
+      action === "archive" ||
+      action === "delete" ||
+      action === "restore_inbox" ||
+      action === "delete_forever"
+    ) {
       onRemoveEmails?.(latestEvent.affectedIds);
       setSelectedIds((currentIds) =>
         currentIds.filter((id) => !latestEvent.affectedIds.includes(id))
@@ -295,27 +344,35 @@ export function EmailTable({
             ? `Deleted ${latestEvent.processed.toLocaleString()} email${
                 latestEvent.processed === 1 ? "" : "s"
               } in ${elapsedSeconds.toFixed(1)}s`
-            : `Exported ${latestEvent.processed.toLocaleString()} email${
-                latestEvent.processed === 1 ? "" : "s"
-              } in ${elapsedSeconds.toFixed(1)}s`,
+            : action === "restore_inbox"
+              ? `Moved ${latestEvent.processed.toLocaleString()} email${
+                  latestEvent.processed === 1 ? "" : "s"
+                } to Inbox in ${elapsedSeconds.toFixed(1)}s`
+              : action === "delete_forever"
+                ? `Deleted ${latestEvent.processed.toLocaleString()} email${
+                    latestEvent.processed === 1 ? "" : "s"
+                  } forever in ${elapsedSeconds.toFixed(1)}s`
+                : `Exported ${latestEvent.processed.toLocaleString()} email${
+                    latestEvent.processed === 1 ? "" : "s"
+                  } in ${elapsedSeconds.toFixed(1)}s`,
     };
   }
 
-  function handleDeleteSelected() {
+  function handleMutationSelected(config: EmailTableActionConfig) {
     if (!hasSelection) {
       setMessage({
         success: false,
-        message: "Select at least one email to delete.",
+        message: config.emptySelectionMessage,
       });
       return;
     }
 
-    const idsToDelete = [...selectedIds];
+    const idsToProcess = [...selectedIds];
 
     startTransition(() => {
       void (async () => {
         try {
-          const result = await executeManualAction(idsToDelete, "delete");
+          const result = await executeManualAction(idsToProcess, config.action);
 
           setMessage(result);
         } catch (error) {
@@ -325,38 +382,7 @@ export function EmailTable({
             message:
               error instanceof Error
                 ? error.message
-                : "Failed to delete selected emails.",
-          });
-        }
-      })();
-    });
-  }
-
-  function handleArchiveSelected() {
-    if (!hasSelection) {
-      setMessage({
-        success: false,
-        message: "Select at least one email to archive.",
-      });
-      return;
-    }
-
-    const idsToArchive = [...selectedIds];
-
-    startTransition(() => {
-      void (async () => {
-        try {
-          const result = await executeManualAction(idsToArchive, "archive");
-
-          setMessage(result);
-        } catch (error) {
-          setBulkActionProgress(null);
-          setMessage({
-            success: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to archive selected emails.",
+                : config.failureMessage,
           });
         }
       })();
@@ -435,31 +461,21 @@ export function EmailTable({
             </button>
           ) : null}
 
-          <button
-            type="button"
-            onClick={handleDeleteSelected}
-            disabled={!hasSelection || isExecuting}
-            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
-              hasSelection
-                ? "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
-                : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
-            }`}
-          >
-            {isExecuting ? "Working..." : "Delete Selected"}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleArchiveSelected}
-            disabled={!hasSelection || isExecuting}
-            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
-              hasSelection
-                ? "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
-                : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
-            }`}
-          >
-            {isExecuting ? "Working..." : "Archive Selected"}
-          </button>
+          {visibleActions.map((actionConfig) => (
+            <button
+              key={actionConfig.action}
+              type="button"
+              onClick={() => handleMutationSelected(actionConfig)}
+              disabled={!hasSelection || isExecuting}
+              className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                hasSelection
+                  ? actionConfig.activeClassName
+                  : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
+              }`}
+            >
+              {isExecuting ? "Working..." : actionConfig.label}
+            </button>
+          ))}
 
           {showExportSelected ? (
             <ExportSelectedButton
@@ -583,7 +599,15 @@ export function EmailTable({
 
 function getLoadingLabel(action: BulkActionProgress["action"]): string {
   if (action === "delete") {
-    return "Deleting";
+    return "Moving To Trash";
+  }
+
+  if (action === "restore_inbox") {
+    return "Moving To Inbox";
+  }
+
+  if (action === "delete_forever") {
+    return "Deleting Forever";
   }
 
   if (action === "export") {
@@ -622,6 +646,26 @@ function getProgressAccentClasses(action: BulkActionProgress["action"]): {
       track: "bg-red-100 dark:bg-[#3A2424]",
       bar: "bg-[#EF4444]",
       text: "text-red-700 dark:text-red-300",
+    };
+  }
+
+  if (action === "delete_forever") {
+    return {
+      container:
+        "border-red-200 bg-red-50 text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300",
+      track: "bg-red-100 dark:bg-[#3A2424]",
+      bar: "bg-[#EF4444]",
+      text: "text-red-700 dark:text-red-300",
+    };
+  }
+
+  if (action === "restore_inbox") {
+    return {
+      container:
+        "border-orange-200 bg-orange-50 text-[#D97706] dark:border-[#5A3A16] dark:bg-[#2F261B] dark:text-[#FBBF24]",
+      track: "bg-orange-100 dark:bg-[#3A2D1C]",
+      bar: "bg-[#D97706]",
+      text: "text-[#D97706] dark:text-[#FBBF24]",
     };
   }
 

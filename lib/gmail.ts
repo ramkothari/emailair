@@ -346,7 +346,8 @@ export async function getRecentEmails(
 export async function getRecentEmailsPage(
   accessToken: string,
   limit: number = 50,
-  pageToken?: string
+  pageToken?: string,
+  mailbox: EmailFilter["mailbox"] = "inbox"
 ): Promise<{
   emails: Email[];
   nextPageToken?: string;
@@ -363,11 +364,16 @@ export async function getRecentEmailsPage(
       auth,
     });
 
+    const mailboxQuery = getMailboxSearchQuery(mailbox);
     const listResponse = await gmail.users.messages.list({
       userId: "me",
       maxResults: limit,
-      labelIds: ["INBOX"],
       pageToken,
+      ...(mailbox === "inbox"
+        ? { labelIds: ["INBOX"] }
+        : mailboxQuery
+          ? { q: mailboxQuery }
+          : {}),
     });
 
     const messages = listResponse.data.messages ?? [];
@@ -447,6 +453,80 @@ export async function deleteEmails(
       ),
       batchDelayMs: getPositiveIntegerEnv(
         "GMAIL_DELETE_BATCH_DELAY_MS",
+        DEFAULT_GMAIL_DELETE_BATCH_DELAY_MS
+      ),
+    }
+  );
+}
+
+export async function restoreEmailsToInbox(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const gmail = getGmailClient(accessToken);
+  const batchSize = getPositiveIntegerEnv(
+    "GMAIL_RESTORE_BATCH_SIZE",
+    DEFAULT_GMAIL_BULK_BATCH_SIZE
+  );
+  const batchDelayMs = getPositiveIntegerEnv(
+    "GMAIL_RESTORE_BATCH_DELAY_MS",
+    DEFAULT_GMAIL_BULK_BATCH_DELAY_MS
+  );
+  const batches = createBatches(ids, batchSize);
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    await withGmailRetry(
+      "gmail.messages.batchModify.restoreToInbox",
+      () =>
+        gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: batches[batchIndex],
+            addLabelIds: ["INBOX"],
+            removeLabelIds: ["TRASH"],
+          },
+        }),
+      {
+        batchIndex: batchIndex + 1,
+        emailCount: batches[batchIndex].length,
+      }
+    );
+
+    if (batchIndex < batches.length - 1) {
+      await sleep(batchDelayMs);
+    }
+  }
+}
+
+export async function deleteEmailsForever(
+  accessToken: string,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    throw new Error("No emails selected.");
+  }
+
+  const gmail = getGmailClient(accessToken);
+
+  await processGmailIdsInBatches(
+    ids,
+    (id) =>
+      gmail.users.messages.delete({
+        userId: "me",
+        id,
+      }),
+    {
+      operationName: "gmail.messages.deleteForever",
+      batchSize: getPositiveIntegerEnv(
+        "GMAIL_DELETE_FOREVER_BATCH_SIZE",
+        DEFAULT_GMAIL_DELETE_BATCH_SIZE
+      ),
+      batchDelayMs: getPositiveIntegerEnv(
+        "GMAIL_DELETE_FOREVER_BATCH_DELAY_MS",
         DEFAULT_GMAIL_DELETE_BATCH_DELAY_MS
       ),
     }
@@ -601,8 +681,20 @@ function formatGmailSearchValue(value: string): string {
   return escaped;
 }
 
+function getMailboxSearchQuery(mailbox: EmailFilter["mailbox"]): string {
+  if (mailbox === "trash") {
+    return "in:trash";
+  }
+
+  if (mailbox === "archive") {
+    return "in:all -in:inbox -in:trash -in:spam -in:sent -in:drafts";
+  }
+
+  return "in:inbox";
+}
+
 function buildGmailSearchQuery(filter: EmailFilter): string {
-  const queryParts: string[] = [];
+  const queryParts: string[] = [getMailboxSearchQuery(filter.mailbox ?? "inbox")];
 
   if (filter.query?.trim()) {
     queryParts.push(filter.query.trim());

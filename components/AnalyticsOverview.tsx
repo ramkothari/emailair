@@ -1,3 +1,5 @@
+"use client";
+
 import type { InboxHealth } from "@/types/analytics";
 
 type AnalyticsOverviewProps = {
@@ -5,6 +7,8 @@ type AnalyticsOverviewProps = {
   scannedEmailCount: number;
   maxAnalyzed: number;
   scanComplete: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 };
 
 function formatNumber(value: number): string {
@@ -16,6 +20,8 @@ export function AnalyticsOverview({
   scannedEmailCount,
   maxAnalyzed,
   scanComplete,
+  onRefresh,
+  refreshing = false,
 }: AnalyticsOverviewProps) {
   const cards = [
     {
@@ -38,15 +44,28 @@ export function AnalyticsOverview({
 
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-[#232326] dark:ring-[#3F3F46]">
-      <div className="mb-5">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-[#F5F5F5]">
-          Inbox Health
-        </h2>
-        <p className="mt-1 text-sm text-gray-600 dark:text-[#A1A1AA]">
-          Scanned {formatNumber(scannedEmailCount)} of up to{" "}
-          {formatNumber(maxAnalyzed)} inbox emails using Gmail metadata only.
-          {scanComplete ? " Full scan complete." : " Scan limit reached."}
-        </p>
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-[#F5F5F5]">
+            Inbox Health
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-[#A1A1AA]">
+            Scanned {formatNumber(scannedEmailCount)} of up to{" "}
+            {formatNumber(maxAnalyzed)} inbox emails using Gmail metadata only.
+            {scanComplete ? " Full scan complete." : " Scan limit reached."}
+          </p>
+        </div>
+
+        {onRefresh ? (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="inline-flex h-8 items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-xs font-medium text-gray-800 hover:bg-[#F3F3F3] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#F5F5F5] dark:hover:bg-white/[0.08]"
+          >
+            {refreshing ? "Refreshing..." : "Refresh Analytics"}
+          </button>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

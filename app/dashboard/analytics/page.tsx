@@ -1,14 +1,6 @@
 import { redirect } from "next/navigation";
-import { ActivityTrends } from "@/components/ActivityTrends";
-import { AnalyticsOverview } from "@/components/AnalyticsOverview";
-import { AnalyticsRefreshControls } from "@/components/AnalyticsRefreshControls";
-import { AttachmentInsights } from "@/components/AttachmentInsights";
-import { CategoryBreakdown } from "@/components/CategoryBreakdown";
-import { EmailAgeDistribution } from "@/components/EmailAgeDistribution";
-import { NewsletterInsights } from "@/components/NewsletterInsights";
-import { SenderInsights } from "@/components/SenderInsights";
+import { AnalyticsProgressiveDashboard } from "@/components/AnalyticsProgressiveDashboard";
 import { auth } from "@/lib/auth";
-import { getEmailAnalytics } from "@/lib/analytics";
 
 const DEFAULT_ANALYTICS_SCAN_LIMIT = 1_000;
 const MAX_ANALYTICS_SCAN_LIMIT = 100_000;
@@ -42,58 +34,12 @@ export default async function DashboardAnalyticsPage({
     redirect("/");
   }
 
-  let analytics = null;
-  let analyticsError: string | null = null;
-
-  try {
-    analytics = await getEmailAnalytics(
-      session.accessToken,
-      session.user?.email ?? "unknown-user",
-      getAnalyticsScanLimit(),
-      {
-        forceRefresh: Boolean(params?.refresh),
-      }
-    );
-  } catch (error) {
-    analyticsError =
-      error instanceof Error ? error.message : "Failed to load analytics.";
-  }
-
   return (
     <section className="mb-8 space-y-6">
-      {analyticsError ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-[#FB7185]">
-          {analyticsError}
-        </div>
-      ) : analytics ? (
-        <>
-          <AnalyticsRefreshControls
-            generatedAt={analytics.generatedAt}
-            cached={analytics.cached}
-          />
-
-          <AnalyticsOverview
-            stats={analytics.inboxHealth}
-            scannedEmailCount={analytics.scannedEmailCount}
-            maxAnalyzed={analytics.maxScanned}
-            scanComplete={analytics.scanComplete}
-          />
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <CategoryBreakdown categories={analytics.categoryBreakdown} />
-            <AttachmentInsights stats={analytics.attachmentStats} />
-          </div>
-
-          <EmailAgeDistribution buckets={analytics.ageDistribution} />
-          <SenderInsights insights={analytics.senderInsights} />
-          <ActivityTrends trends={analytics.activityTrends} />
-          <NewsletterInsights insights={analytics.newsletterInsights} />
-        </>
-      ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#A1A1AA]">
-          Analytics unavailable. Reconnect Gmail if this continues.
-        </div>
-      )}
+      <AnalyticsProgressiveDashboard
+        limit={getAnalyticsScanLimit()}
+        forceRefresh={Boolean(params?.refresh)}
+      />
     </section>
   );
 }

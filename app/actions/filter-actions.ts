@@ -73,7 +73,12 @@ export async function previewFilterAction(
   }
 
   try {
-    const data = await searchEmails(currentSession.accessToken, filter, 50);
+    const data = await searchEmails(
+      currentSession.accessToken,
+      filter,
+      50,
+      pageToken
+    );
 
     return {
       ok: true,

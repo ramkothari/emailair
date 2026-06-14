@@ -8,6 +8,7 @@ import type {
   EmailAnalytics,
   InboxHealth,
   NewsletterInsights,
+  ProtectedEmail,
   SenderInsights,
   SenderStat,
 } from "@/types/analytics";
@@ -26,11 +27,13 @@ type AttachmentInfo = {
 };
 
 type MetadataEmail = {
+  id: string;
   senderName: string;
   subject: string;
   timestamp: number;
   labelIds: string[];
   hasNewsletterHeaders: boolean;
+  protectedReason: string | null;
 };
 
 type AnalyticsAccumulator = {
@@ -44,6 +47,7 @@ type AnalyticsAccumulator = {
   newsletterSenderCounts: Map<string, number>;
   monthCounts: Map<string, number>;
   weekdayCounts: Map<string, number>;
+  protectedEmails: ProtectedEmail[];
 };
 
 type AnalyticsCacheEntry = {
@@ -52,11 +56,20 @@ type AnalyticsCacheEntry = {
   analyzedEmailCount: number;
 };
 
+type IncrementalAnalyticsJob = {
+  accumulator: AnalyticsAccumulator;
+  generatedAt: number;
+  limit: number;
+  pageToken?: string;
+  scanComplete: boolean;
+};
+
 type AnalyticsOptions = {
   forceRefresh?: boolean;
 };
 
 const analyticsCache = new Map<string, AnalyticsCacheEntry>();
+const incrementalAnalyticsJobs = new Map<string, IncrementalAnalyticsJob>();
 
 const CATEGORY_LABELS: Array<{
   labelId: string;
@@ -95,6 +108,7 @@ function createAccumulator(): AnalyticsAccumulator {
     newsletterSenderCounts: new Map(),
     monthCounts: new Map(),
     weekdayCounts: new Map(),
+    protectedEmails: [],
   };
 }
 
@@ -206,6 +220,35 @@ function hasNewsletterSignal(input: {
   );
 }
 
+function getProtectedReason(input: {
+  sender: string;
+  subject: string;
+  labelIds: string[];
+}): string | null {
+  const text = `${input.sender} ${input.subject}`.toLowerCase();
+
+  const rules: Array<[RegExp, string]> = [
+    [/\b(payment failed|payment failure|billing failed|past due|overdue)\b/, "Payment issue"],
+    [/\b(invoice|receipt|bill due|billing statement|tax document|1099|w-2)\b/, "Financial document"],
+    [/\b(job offer|interview|recruiter|contract|agreement|legal notice)\b/, "Work or legal"],
+    [/\b(security alert|account recovery|password reset|verify your account|suspicious sign-in)\b/, "Security alert"],
+    [/\b(domain renewal|renewal failed|service suspension|account suspended)\b/, "Service renewal"],
+    [/\b(bank|banking|credit card|debit card|statement available)\b/, "Banking"],
+  ];
+
+  for (const [pattern, reason] of rules) {
+    if (pattern.test(text)) {
+      return reason;
+    }
+  }
+
+  if (input.labelIds.includes("IMPORTANT") || input.labelIds.includes("STARRED")) {
+    return "Marked important";
+  }
+
+  return null;
+}
+
 function isNoReplySender(sender: string): boolean {
   const normalized = sender.toLowerCase();
   return (
@@ -262,6 +305,7 @@ function toMetadataEmail(message: gmail_v1.Schema$Message): MetadataEmail {
   const precedence = getHeader(headers, "Precedence");
 
   return {
+    id: message.id ?? "",
     senderName: parseSenderName(sender),
     subject,
     timestamp: getMessageTimestamp(message),
@@ -272,6 +316,11 @@ function toMetadataEmail(message: gmail_v1.Schema$Message): MetadataEmail {
       listUnsubscribe,
       listId,
       precedence,
+      labelIds,
+    }),
+    protectedReason: getProtectedReason({
+      sender,
+      subject,
       labelIds,
     }),
   };
@@ -310,6 +359,22 @@ function addEmailToAccumulator(
 
   if (email.hasNewsletterHeaders) {
     increment(accumulator.newsletterSenderCounts, email.senderName);
+  }
+
+  if (email.protectedReason && email.id) {
+    const alreadyTracked = accumulator.protectedEmails.some(
+      (item) => item.id === email.id
+    );
+
+    if (!alreadyTracked) {
+      accumulator.protectedEmails.push({
+        id: email.id,
+        sender: email.senderName,
+        subject: email.subject,
+        reason: email.protectedReason,
+        timestamp: new Date(email.timestamp).toISOString(),
+      });
+    }
   }
 }
 
@@ -433,6 +498,63 @@ function getNewsletterInsights(
         sender,
         count,
       })),
+  };
+}
+
+function getEmptyAttachmentStats(): AttachmentStats {
+  return {
+    emailsWithAttachments: 0,
+    largestMessageSizeEstimate: 0,
+    estimatedAttachmentMessageBytes: 0,
+  };
+}
+
+function buildAnalyticsResult(input: {
+  accumulator: AnalyticsAccumulator;
+  attachmentStats: AttachmentStats;
+  safeLimit: number;
+  scanComplete: boolean;
+  generatedAt: number;
+  cached: boolean;
+}): EmailAnalytics {
+  const {
+    accumulator,
+    attachmentStats,
+    safeLimit,
+    scanComplete,
+    generatedAt,
+    cached,
+  } = input;
+
+  return {
+    inboxHealth: getInboxHealth(accumulator, attachmentStats),
+    categoryBreakdown: getCategoryBreakdown(accumulator),
+    ageDistribution: getAgeDistribution(accumulator),
+    senderInsights: getSenderInsights(accumulator),
+    attachmentStats,
+    activityTrends: getActivityTrends(accumulator),
+    newsletterInsights: getNewsletterInsights(accumulator),
+    protectedEmails: accumulator.protectedEmails
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, 25),
+    progress: {
+      status: scanComplete || accumulator.totalScanned > 0 ? "ready" : "loading",
+      sendersAnalyzed: accumulator.totalScanned > 0,
+      categoriesDetected: accumulator.totalScanned > 0,
+      protectedEmailsIdentified: accumulator.totalScanned > 0,
+      secondaryAnalyticsReady: scanComplete,
+      scannedEmailCount: accumulator.totalScanned,
+      maxScanned: safeLimit,
+    },
+    scannedEmailCount: accumulator.totalScanned,
+    maxScanned: safeLimit,
+    scanComplete,
+    generatedAt: new Date(generatedAt).toISOString(),
+    cached,
   };
 }
 
@@ -561,6 +683,82 @@ async function aggregateEmailMetadata(
   };
 }
 
+async function aggregateEmailMetadataBatch(input: {
+  accessToken: string;
+  accumulator: AnalyticsAccumulator;
+  limit: number;
+  batchSize: number;
+  pageToken?: string;
+}): Promise<{
+  nextPageToken?: string;
+  scanComplete: boolean;
+}> {
+  const safeLimit = Math.min(Math.max(input.limit, 1), MAX_ANALYTICS_EMAILS);
+  const remaining = safeLimit - input.accumulator.totalScanned;
+
+  if (remaining <= 0) {
+    return {
+      nextPageToken: input.pageToken,
+      scanComplete: true,
+    };
+  }
+
+  const gmail = getGmailClient(input.accessToken);
+  const listResponse = await gmail.users.messages.list({
+    userId: "me",
+    maxResults: Math.min(GMAIL_PAGE_SIZE, input.batchSize, remaining),
+    pageToken: input.pageToken,
+    labelIds: ["INBOX"],
+  });
+
+  const messageRefs = listResponse.data.messages ?? [];
+  const nextPageToken = listResponse.data.nextPageToken ?? undefined;
+
+  if (messageRefs.length === 0) {
+    return {
+      nextPageToken,
+      scanComplete: !nextPageToken,
+    };
+  }
+
+  const settledMessages = await mapWithConcurrency(
+    messageRefs,
+    DETAIL_CONCURRENCY,
+    async (messageRef): Promise<MetadataEmail> => {
+      if (!messageRef.id) {
+        throw new Error("Gmail message is missing an ID.");
+      }
+
+      const messageResponse = await gmail.users.messages.get({
+        userId: "me",
+        id: messageRef.id,
+        format: "metadata",
+        metadataHeaders: [
+          "From",
+          "Subject",
+          "Date",
+          "List-Unsubscribe",
+          "List-Id",
+          "Precedence",
+        ],
+      });
+
+      return toMetadataEmail(messageResponse.data);
+    }
+  );
+
+  for (const result of settledMessages) {
+    if (result.status === "fulfilled") {
+      addEmailToAccumulator(input.accumulator, result.value);
+    }
+  }
+
+  return {
+    nextPageToken,
+    scanComplete: !nextPageToken || input.accumulator.totalScanned >= safeLimit,
+  };
+}
+
 async function aggregateAttachmentMetadata(
   accessToken: string,
   limit: number
@@ -656,26 +854,111 @@ export async function getEmailAnalytics(
         ]);
 
       const generatedAt = Date.now();
-      const result: EmailAnalytics = {
-        inboxHealth: getInboxHealth(accumulator, attachmentStats),
-        categoryBreakdown: getCategoryBreakdown(accumulator),
-        ageDistribution: getAgeDistribution(accumulator),
-        senderInsights: getSenderInsights(accumulator),
+      const result = buildAnalyticsResult({
+        accumulator,
         attachmentStats,
-        activityTrends: getActivityTrends(accumulator),
-        newsletterInsights: getNewsletterInsights(accumulator),
-        scannedEmailCount: accumulator.totalScanned,
-        maxScanned: safeLimit,
+        safeLimit,
         scanComplete,
-        generatedAt: new Date(generatedAt).toISOString(),
+        generatedAt,
         cached: false,
-      };
+      });
 
     analyticsCache.set(cacheKey, {
       result,
       generatedAt,
       analyzedEmailCount: result.scannedEmailCount,
     });
+
+    return result;
+  } catch (error) {
+    throw new Error(getGmailErrorMessage(error));
+  }
+}
+
+export async function getProgressiveEmailAnalytics(input: {
+  accessToken: string;
+  userKey: string;
+  limit?: number;
+  batchSize?: number;
+  forceRefresh?: boolean;
+}): Promise<EmailAnalytics> {
+  try {
+    const safeLimit = Math.min(
+      Math.max(input.limit ?? DEFAULT_ANALYTICS_EMAILS, 1),
+      MAX_ANALYTICS_EMAILS
+    );
+    const batchSize = Math.min(
+      Math.max(input.batchSize ?? 50, 1),
+      GMAIL_PAGE_SIZE
+    );
+    const cacheKey = createAnalyticsCacheKey(input.userKey, safeLimit);
+    const jobKey = `progressive:${cacheKey}`;
+
+    if (input.forceRefresh) {
+      incrementalAnalyticsJobs.delete(jobKey);
+      analyticsCache.delete(cacheKey);
+    }
+
+    const cached = !input.forceRefresh
+      ? getValidCachedAnalytics(cacheKey)
+      : null;
+
+    if (cached) {
+      return cached;
+    }
+
+    let job = incrementalAnalyticsJobs.get(jobKey);
+
+    if (!job) {
+      job = {
+        accumulator: createAccumulator(),
+        generatedAt: Date.now(),
+        limit: safeLimit,
+        scanComplete: false,
+      };
+      incrementalAnalyticsJobs.set(jobKey, job);
+    }
+
+    if (!job.scanComplete && job.accumulator.totalScanned < safeLimit) {
+      const batch = await aggregateEmailMetadataBatch({
+        accessToken: input.accessToken,
+        accumulator: job.accumulator,
+        limit: safeLimit,
+        batchSize,
+        pageToken: job.pageToken,
+      });
+
+      job.pageToken = batch.nextPageToken;
+      job.scanComplete = batch.scanComplete;
+    }
+
+    const attachmentStats =
+      job.scanComplete || job.accumulator.totalScanned >= safeLimit
+        ? await aggregateAttachmentMetadata(input.accessToken, safeLimit)
+        : getEmptyAttachmentStats();
+
+    const result = buildAnalyticsResult({
+      accumulator: job.accumulator,
+      attachmentStats,
+      safeLimit,
+      scanComplete: job.scanComplete,
+      generatedAt: job.generatedAt,
+      cached: false,
+    });
+
+    if (job.scanComplete || job.accumulator.totalScanned >= safeLimit) {
+      analyticsCache.set(cacheKey, {
+        result: {
+          ...result,
+          progress: {
+            ...result.progress,
+            secondaryAnalyticsReady: true,
+          },
+        },
+        generatedAt: job.generatedAt,
+        analyzedEmailCount: result.scannedEmailCount,
+      });
+    }
 
     return result;
   } catch (error) {

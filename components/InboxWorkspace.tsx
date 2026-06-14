@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { Archive, Inbox, Trash } from "lucide-react";
 import { loadInboxPageAction } from "@/app/actions/inbox-actions";
-import { EmailTable } from "@/components/EmailTable";
+import {
+  EmailTable,
+  type EmailTableActionConfig,
+} from "@/components/EmailTable";
 import { EmailViewer } from "@/components/EmailViewer";
 import { InboxAIAnalysisModal } from "@/components/InboxAIAnalysisModal";
 import {
@@ -50,6 +54,95 @@ type InboxWorkspaceProps = {
 };
 
 type InboxMode = "latest" | "search";
+type MailboxTab = NonNullable<EmailFilter["mailbox"]>;
+
+const mailboxTabs: Array<{
+  value: MailboxTab;
+  label: string;
+  icon: typeof Inbox;
+}> = [
+  { value: "inbox", label: "Inbox", icon: Inbox },
+  { value: "archive", label: "Archive", icon: Archive },
+  { value: "trash", label: "Trash", icon: Trash },
+];
+
+const actionStyles = {
+  archive:
+    "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+  delete:
+    "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+  orange:
+    "border-[#D97706]/40 bg-black/[0.03] text-[#D97706] hover:bg-[#D97706] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+};
+
+function getMailboxActions(mailbox: MailboxTab): EmailTableActionConfig[] {
+  if (mailbox === "archive") {
+    return [
+      {
+        action: "restore_inbox",
+        label: "Move To Inbox",
+        emptySelectionMessage: "Select at least one email to move to Inbox.",
+        failureMessage: "Failed to move selected emails to Inbox.",
+        activeClassName: actionStyles.orange,
+      },
+      {
+        action: "delete",
+        label: "Move To Trash",
+        emptySelectionMessage: "Select at least one email to move to Trash.",
+        failureMessage: "Failed to move selected emails to Trash.",
+        activeClassName: actionStyles.delete,
+      },
+    ];
+  }
+
+  if (mailbox === "trash") {
+    return [
+      {
+        action: "restore_inbox",
+        label: "Restore To Inbox",
+        emptySelectionMessage: "Select at least one email to restore.",
+        failureMessage: "Failed to restore selected emails.",
+        activeClassName: actionStyles.orange,
+      },
+      {
+        action: "delete_forever",
+        label: "Delete Forever",
+        emptySelectionMessage: "Select at least one email to delete forever.",
+        failureMessage: "Failed to permanently delete selected emails.",
+        activeClassName: actionStyles.delete,
+      },
+    ];
+  }
+
+  return [
+    {
+      action: "archive",
+      label: "Archive",
+      emptySelectionMessage: "Select at least one email to archive.",
+      failureMessage: "Failed to archive selected emails.",
+      activeClassName: actionStyles.archive,
+    },
+    {
+      action: "delete",
+      label: "Move To Trash",
+      emptySelectionMessage: "Select at least one email to move to Trash.",
+      failureMessage: "Failed to move selected emails to Trash.",
+      activeClassName: actionStyles.delete,
+    },
+  ];
+}
+
+function getMailboxHeading(mailbox: MailboxTab): string {
+  if (mailbox === "archive") {
+    return "Archive Emails";
+  }
+
+  if (mailbox === "trash") {
+    return "Trash Emails";
+  }
+
+  return "Inbox Emails";
+}
 
 export function InboxWorkspace({
   initialEmails,
@@ -61,6 +154,7 @@ export function InboxWorkspace({
 }: InboxWorkspaceProps) {
   const [emails, setEmails] = useState(initialEmails);
   const [mode, setMode] = useState<InboxMode>("latest");
+  const [activeMailbox, setActiveMailbox] = useState<MailboxTab>("inbox");
   const [nextPageToken, setNextPageToken] = useState(initialNextPageToken);
   const [totalMatches, setTotalMatches] = useState(initialEmails.length);
   const [message, setMessage] = useState<string | null>(null);
@@ -93,6 +187,11 @@ export function InboxWorkspace({
     [selectedEmailMetadata]
   );
 
+  const mailboxActions = useMemo(
+    () => getMailboxActions(activeMailbox),
+    [activeMailbox]
+  );
+
   function handleSearchResults(data: PreviewData, _filter: EmailFilter, nextMessage?: string) {
     setEmails(data.emails);
     setMode("search");
@@ -114,7 +213,7 @@ export function InboxWorkspace({
     setIsSearching(true);
 
     try {
-      const result = await loadInboxPageAction();
+      const result = await loadInboxPageAction(undefined, activeMailbox);
 
       if (!result.ok) {
         setEmails(initialEmails);
@@ -135,7 +234,9 @@ export function InboxWorkspace({
   function buildFilterFromSearchValues(
     values: InboxSearchFormValues
   ): EmailFilter | null {
-    const filter: EmailFilter = {};
+    const filter: EmailFilter = {
+      mailbox: activeMailbox,
+    };
     const trimmedQuery = values.query.trim();
     const trimmedSender = values.sender.trim();
     const trimmedSubject = values.subject.trim();
@@ -214,6 +315,39 @@ export function InboxWorkspace({
     }
   }
 
+  async function handleMailboxChange(nextMailbox: MailboxTab) {
+    if (nextMailbox === activeMailbox && mode === "latest") {
+      return;
+    }
+
+    setActiveMailbox(nextMailbox);
+    setMode("latest");
+    setMessage(null);
+    setError(null);
+    setIsAiOpen(false);
+    setAiSelectedIds([]);
+    setActiveSearchFilter(null);
+    setIsSearching(true);
+
+    try {
+      const result = await loadInboxPageAction(undefined, nextMailbox);
+
+      if (!result.ok) {
+        setEmails([]);
+        setTotalMatches(0);
+        setNextPageToken(undefined);
+        setError(result.error);
+        return;
+      }
+
+      setEmails(result.data.emails);
+      setTotalMatches(result.data.emails.length);
+      setNextPageToken(result.data.nextPageToken);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
   async function handleLoadMore() {
     if (!nextPageToken) {
       return;
@@ -243,7 +377,7 @@ export function InboxWorkspace({
           return;
         }
 
-        const result = await loadInboxPageAction(nextPageToken);
+        const result = await loadInboxPageAction(nextPageToken, activeMailbox);
 
         if (!result.ok) {
           setError(result.error);
@@ -295,7 +429,7 @@ export function InboxWorkspace({
   const tableDescription =
     mode === "search"
       ? `Showing ${emails.length.toLocaleString()} of ${totalMatches.toLocaleString()} matching email${totalMatches === 1 ? "" : "s"}.`
-      : `Showing latest ${emails.length} inbox email${emails.length === 1 ? "" : "s"}.`;
+      : `Showing latest ${emails.length} ${activeMailbox} email${emails.length === 1 ? "" : "s"}.`;
 
   return (
     <>
@@ -319,11 +453,38 @@ export function InboxWorkspace({
         </div>
       ) : null}
 
+      <div className="flex items-center justify-center gap-3">
+        {mailboxTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeMailbox === tab.value;
+
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => {
+                void handleMailboxChange(tab.value);
+              }}
+              aria-label={tab.label}
+              title={tab.label}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition hover:cursor-pointer ${
+                isActive
+                  ? "border-[#D97706]/60 bg-[#D97706]/10 text-[#D97706] shadow-[0_0_18px_rgba(217,119,6,0.28)] dark:border-[#D97706]/60 dark:bg-[#D97706]/[0.14] dark:text-[#FBBF24] dark:shadow-[0_0_22px_rgba(217,119,6,0.24)]"
+                  : "border-[rgba(0,0,0,0.08)] bg-white text-gray-600 hover:border-[#D97706]/35 hover:text-[#D97706] hover:shadow-[0_0_14px_rgba(217,119,6,0.16)] dark:border-[#3F3F46] dark:bg-[#232326] dark:text-[#A1A1AA] dark:hover:border-[#D97706]/40 dark:hover:text-[#FBBF24]"
+              }`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[#F3F3F3] shadow-sm dark:border-[#3F3F46] dark:bg-[#232326] dark:shadow-[0_18px_45px_rgba(0,0,0,0.18)]">
         <EmailTable
           emails={emails}
           onDeleteSelected={onDeleteSelected}
           onArchiveSelected={onArchiveSelected}
+          actions={mailboxActions}
           onRemoveEmails={(ids) => {
             setEmails((currentEmails) =>
               currentEmails.filter((email) => !ids.includes(email.id))
@@ -332,7 +493,7 @@ export function InboxWorkspace({
               Math.max(currentTotal - ids.length, 0)
             );
           }}
-          heading="Inbox Emails"
+          heading={getMailboxHeading(activeMailbox)}
           description={tableDescription}
           onViewEmail={setViewingEmailId}
           onLoadMore={handleLoadMore}

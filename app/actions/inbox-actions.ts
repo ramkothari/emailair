@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { getRecentEmailsPage } from "@/lib/gmail";
 import type { Email } from "@/types/email";
+import type { EmailFilter } from "@/types/filter";
 
 export type InboxPageResult =
   | {
@@ -26,7 +27,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 export async function loadInboxPageAction(
-  pageToken?: string
+  pageToken?: string,
+  mailbox: EmailFilter["mailbox"] = "inbox"
 ): Promise<InboxPageResult> {
   const session = await auth();
 
@@ -38,7 +40,12 @@ export async function loadInboxPageAction(
   }
 
   try {
-    const data = await getRecentEmailsPage(session.accessToken, 50, pageToken);
+    const data = await getRecentEmailsPage(
+      session.accessToken,
+      50,
+      pageToken,
+      mailbox
+    );
 
     return {
       ok: true,

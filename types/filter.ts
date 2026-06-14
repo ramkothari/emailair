@@ -4,4 +4,5 @@ export type EmailFilter = {
   subject?: string;
   olderThanDays?: number;
   hasAttachment?: boolean;
+  mailbox?: "inbox" | "archive" | "trash";
 };
