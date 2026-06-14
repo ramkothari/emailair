@@ -9,6 +9,27 @@ type EmailViewerProps = {
   onClose: () => void;
 };
 
+type ViewMode = "rendered" | "raw";
+
+const MAX_EMAIL_DETAILS_CACHE_SIZE = 50;
+const emailDetailsCache = new Map<string, EmailDetails>();
+
+function cacheEmailDetails(messageId: string, email: EmailDetails) {
+  if (emailDetailsCache.has(messageId)) {
+    emailDetailsCache.delete(messageId);
+  }
+
+  emailDetailsCache.set(messageId, email);
+
+  if (emailDetailsCache.size > MAX_EMAIL_DETAILS_CACHE_SIZE) {
+    const oldestKey = emailDetailsCache.keys().next().value;
+
+    if (oldestKey) {
+      emailDetailsCache.delete(oldestKey);
+    }
+  }
+}
+
 function getFileNameFromContentDisposition(
   contentDisposition: string | null,
   fallback: string
@@ -50,6 +71,8 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("rendered");
+  const [iframeHeight, setIframeHeight] = useState(520);
 
   useEffect(() => {
     let active = true;
@@ -57,6 +80,17 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
     async function loadEmail() {
       setLoading(true);
       setError(null);
+      setViewMode("rendered");
+      setIframeHeight(520);
+
+      const cachedEmail = emailDetailsCache.get(messageId);
+
+      if (cachedEmail) {
+        setEmail(cachedEmail);
+        setViewMode(cachedEmail.htmlBody ? "rendered" : "raw");
+        setLoading(false);
+        return;
+      }
 
       try {
         const response = await fetch(
@@ -71,7 +105,9 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
         const data = (await response.json()) as EmailDetails;
 
         if (active) {
+          cacheEmailDetails(messageId, data);
           setEmail(data);
+          setViewMode(data.htmlBody ? "rendered" : "raw");
         }
       } catch (loadError) {
         if (active) {
@@ -94,6 +130,26 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
       active = false;
     };
   }, [messageId]);
+
+  function resizeIframe(iframe: HTMLIFrameElement | null) {
+    if (!iframe) {
+      return;
+    }
+
+    try {
+      const documentElement = iframe.contentDocument?.documentElement;
+      const body = iframe.contentDocument?.body;
+      const nextHeight = Math.max(
+        documentElement?.scrollHeight ?? 0,
+        body?.scrollHeight ?? 0,
+        520
+      );
+
+      setIframeHeight(Math.min(nextHeight + 24, 2400));
+    } catch {
+      setViewMode("raw");
+    }
+  }
 
   async function exportEmail() {
     setExporting(true);
@@ -168,8 +224,15 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {loading ? (
-            <div className="text-sm text-gray-600 dark:text-[#A1A1AA]">
-              Loading email...
+            <div className="space-y-4">
+              <div className="text-sm text-gray-600 dark:text-[#A1A1AA]">
+                Loading email...
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-[#3F3F46] dark:bg-[#18181B]">
+                <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-[#3F3F46]" />
+                <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-[#3F3F46]" />
+                <div className="mt-6 h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-[#2A2A2E]" />
+              </div>
             </div>
           ) : error ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-[#5F3333] dark:bg-[#2D1F1F] dark:text-red-300">
@@ -199,13 +262,50 @@ export function EmailViewer({ messageId, onClose }: EmailViewerProps) {
               </div>
 
               <div>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-[#71717A]">
-                  Body
-                </h3>
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-[#71717A]">
+                    Body
+                  </h3>
 
-                <div className="whitespace-pre-wrap rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-900 dark:border-[#3F3F46] dark:bg-[#18181B] dark:text-[#F5F5F5]">
-                  {email.body || "(No body content)"}
+                  <div className="inline-flex rounded-full border border-[rgba(0,0,0,0.08)] bg-gray-50 p-1 dark:border-[#3F3F46] dark:bg-[#18181B]">
+                    {(["rendered", "raw"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setViewMode(mode)}
+                        disabled={mode === "rendered" && !email.htmlBody}
+                        className={`h-7 rounded-full px-3 text-xs font-medium capitalize transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                          viewMode === mode
+                            ? "bg-[#D97706] text-white shadow-sm"
+                            : "text-gray-600 hover:bg-white dark:text-[#A1A1AA] dark:hover:bg-[#2A2A2E]"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {viewMode === "rendered" && email.htmlBody ? (
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-[#3F3F46]">
+                    <iframe
+                      title={email.subject || "Rendered email"}
+                      srcDoc={email.htmlBody}
+                      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                      onLoad={(event) => {
+                        resizeIframe(event.currentTarget);
+                      }}
+                      className="w-full bg-white"
+                      style={{ height: iframeHeight }}
+                    />
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-900 dark:border-[#3F3F46] dark:bg-[#18181B] dark:text-[#F5F5F5]">
+                    {email.body || "(No body content)"}
+                  </div>
+                )}
               </div>
 
               <AttachmentList

@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import type { gmail_v1 } from "googleapis";
-import type { Email } from "@/types/email";
+import type { Email, EmailDetails } from "@/types/email";
 import type { EmailFilter } from "@/types/filter";
 
 const DEFAULT_GMAIL_BULK_BATCH_SIZE = 25;
@@ -1049,6 +1049,75 @@ function htmlToReadableText(html: string): string {
     .trim();
 }
 
+function sanitizeEmailHtml(html: string): string {
+  const withoutDangerousBlocks = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<object[\s\S]*?<\/object>/gi, "")
+    .replace(/<embed[\s\S]*?<\/embed>/gi, "")
+    .replace(/<form[\s\S]*?<\/form>/gi, "")
+    .replace(/<meta[^>]+http-equiv=["']?refresh["']?[^>]*>/gi, "");
+
+  const withoutDangerousAttributes = withoutDangerousBlocks
+    .replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, "")
+    .replace(
+      /\s+(href|src|xlink:href)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi,
+      ""
+    )
+    .replace(
+      /\s+(href|src|xlink:href)\s*=\s*(['"])\s*data:(?!image\/(?:png|gif|jpe?g|webp|svg\+xml);)[\s\S]*?\2/gi,
+      ""
+    );
+
+  return withoutDangerousAttributes;
+}
+
+function createRenderableEmailHtml(html: string): string {
+  const sanitized = sanitizeEmailHtml(html);
+  const baseStyles = `
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #111827;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    body {
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+    table {
+      max-width: 100%;
+    }
+    a {
+      color: #2563eb;
+    }
+  `;
+
+  if (/<html[\s>]/i.test(sanitized)) {
+    return sanitized
+      .replace(/<head([^>]*)>/i, `<head$1><base target="_blank"><style>${baseStyles}</style>`)
+      .replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
+  }
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <base target="_blank">
+    <style>${baseStyles}</style>
+  </head>
+  <body>${sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ')}</body>
+</html>`;
+}
+
 function collectEmailParts(
   part: gmail_v1.Schema$MessagePart,
   result: {
@@ -1091,7 +1160,7 @@ function collectEmailParts(
 export async function getEmailDetails(
   accessToken: string,
   messageId: string
-) {
+): Promise<EmailDetails> {
   const gmail = getGmailClient(accessToken);
 
   const response = await gmail.users.messages.get({
@@ -1124,6 +1193,7 @@ export async function getEmailDetails(
 
   const plainBody = collected.plainBodies.join("\n\n").trim();
   const htmlBody = collected.htmlBodies.join("\n\n").trim();
+  const renderableHtmlBody = htmlBody ? createRenderableEmailHtml(htmlBody) : "";
 
   const body =
     plainBody ||
@@ -1136,6 +1206,7 @@ export async function getEmailDetails(
     subject: getHeader(headers, "Subject") || "(No Subject)",
     date: getHeader(headers, "Date") || "",
     body,
+    htmlBody: renderableHtmlBody || undefined,
     attachments: collected.attachments,
   };
 }

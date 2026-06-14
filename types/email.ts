@@ -25,6 +25,7 @@ export type EmailDetails = {
   subject: string;
   date: string;
   body: string;
+  htmlBody?: string;
   attachments: Attachment[];
 };
 
