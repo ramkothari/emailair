@@ -453,7 +453,7 @@ export function EmailTable({
               disabled={!hasSelection || isExecuting}
               className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
                 hasSelection
-                  ? "border-[#60A5FA]/40 bg-black/[0.03] text-[#2563EB] hover:bg-[#60A5FA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+                  ? "border-[#60A5FA]/40 bg-black/[0.03] text-[#2563EB] hover:bg-[#60A5FA] hover:text-white hover:shadow-[0_0_14px_rgba(96,165,250,0.22)] dark:border-[#60A5FA]/40 dark:bg-white/[0.04] dark:text-[#93C5FD] dark:hover:bg-[#60A5FA] dark:hover:text-[#18181B]"
                   : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
               }`}
             >

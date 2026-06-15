@@ -16,7 +16,7 @@ import { createHash } from "crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_EMAILS_TO_ANALYZE = 50;
+const MAX_EMAILS_TO_ANALYZE = 100;
 
 type AnalyzeSearchResponse = {
   analysis: AnalysisResult;

@@ -177,7 +177,7 @@ export function ExportSelectedButton({
         disabled={selectedMessageIds.length === 0 || exporting || disabled}
         className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
           selectedMessageIds.length > 0
-            ? "border-[#22C55E]/40 bg-black/[0.03] text-[#16A34A] hover:bg-[#22C55E] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white"
+            ? "border-[#22C55E]/40 bg-black/[0.03] text-[#16A34A] hover:bg-[#22C55E] hover:text-white hover:shadow-[0_0_14px_rgba(34,197,94,0.22)] dark:border-[#22C55E]/40 dark:bg-white/[0.04] dark:text-[#86EFAC] dark:hover:bg-[#22C55E] dark:hover:text-[#18181B]"
             : "border-[rgba(0,0,0,0.08)] bg-black/[0.03] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#71717A]"
         }`}
       >

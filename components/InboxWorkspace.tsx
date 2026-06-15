@@ -68,11 +68,11 @@ const mailboxTabs: Array<{
 
 const actionStyles = {
   archive:
-    "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+    "border-[#A78BFA]/40 bg-black/[0.03] text-[#7C3AED] hover:bg-[#A78BFA] hover:text-white hover:shadow-[0_0_14px_rgba(167,139,250,0.22)] dark:border-[#A78BFA]/40 dark:bg-white/[0.04] dark:text-[#C4B5FD] dark:hover:bg-[#A78BFA] dark:hover:text-[#18181B]",
   delete:
-    "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+    "border-[#EF4444]/40 bg-black/[0.03] text-[#DC2626] hover:bg-[#EF4444] hover:text-white hover:shadow-[0_0_14px_rgba(239,68,68,0.22)] dark:border-[#EF4444]/40 dark:bg-white/[0.04] dark:text-[#FCA5A5] dark:hover:bg-[#EF4444] dark:hover:text-white",
   orange:
-    "border-[#D97706]/40 bg-black/[0.03] text-[#D97706] hover:bg-[#D97706] hover:text-white dark:bg-white/[0.04] dark:text-[#A1A1AA] dark:hover:text-white",
+    "border-[#D97706]/40 bg-black/[0.03] text-[#D97706] hover:bg-[#D97706] hover:text-white hover:shadow-[0_0_14px_rgba(217,119,6,0.22)] dark:border-[#F59E0B]/40 dark:bg-white/[0.04] dark:text-[#FBBF24] dark:hover:bg-[#F59E0B] dark:hover:text-[#18181B]",
 };
 
 function getMailboxActions(mailbox: MailboxTab): EmailTableActionConfig[] {
@@ -182,11 +182,6 @@ export function InboxWorkspace({
         })),
     [aiSelectedIds, emails]
   );
-  const aiEmailsForAnalysis = useMemo(
-    () => selectedEmailMetadata.slice(0, 100),
-    [selectedEmailMetadata]
-  );
-
   const mailboxActions = useMemo(
     () => getMailboxActions(activeMailbox),
     [activeMailbox]
@@ -516,7 +511,7 @@ export function InboxWorkspace({
 
       <InboxAIAnalysisModal
         open={isAiOpen}
-        emails={aiEmailsForAnalysis}
+        emails={selectedEmailMetadata}
         totalEmailsFound={selectedEmailMetadata.length}
         isExecuting={isExecutingAiAction}
         onClose={() => setIsAiOpen(false)}
