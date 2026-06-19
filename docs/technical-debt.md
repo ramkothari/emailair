@@ -6,32 +6,17 @@ Items backed by file evidence. Severity is engineering judgment for planning, no
 
 ## 1. TypeScript Compile Errors (Blocking CI-quality gate)
 
-**Evidence:** `npm run type-check` (`package.json` script) reports 15 errors.
+**Evidence:** `npm run type-check` (`package.json` script) previously reported task-system errors. The legacy task system has since been removed.
 
 | File | Issue |
 |------|-------|
-| `components/RunTaskModal.tsx:6` | Import `@/lib/types` — module does not exist (should be `@/types/email` per repo structure) |
-| `components/RunTaskModal.tsx:46` | `task` possibly null in `handleConfirm` |
-| `components/TaskImpactSummary.tsx` | Uses `analysis.important`, `risk.risk`, `risk.warnings` — not on `EmailAnalysis` / `RiskAssessment` (`types/ai.ts`) |
-| `lib/task-preview.ts:56-58` | Passes `EmailMetadata[]` to `analyzeEmails`/`detectRisk`/`summarizeEmails` expecting `string[]` (`lib/ai/index.ts`) |
+| None currently documented here | Re-run `npm run type-check` for current status |
 
 **Impact:** Task automation path cannot be considered type-safe or build-clean.
 
 ---
 
-## 2. Task Automation Not Integrated
-
-**Evidence:**
-
-- Grep `SaveTaskButton` / `TaskPreviewCard` under `app/` — **no matches**
-- `PHASE_8_4_REAL_INTEGRATION.txt` describes required wiring not done
-- `RunTaskModal.tsx` lines 88–93: placeholder `"[Results will appear after search]"`
-
-**Impact:** Phase 8.3/8.4 user-facing automation incomplete despite components existing.
-
----
-
-## 3. Dual Archive/Delete Code Paths
+## 2. Dual Archive/Delete Code Paths
 
 **Evidence:**
 

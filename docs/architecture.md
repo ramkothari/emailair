@@ -43,14 +43,12 @@ flowchart TB
     AI[lib/ai/*]
     Executor[lib/executor/*]
     Export[lib/export.ts]
-    Tasks[lib/tasks/* browser storage helpers]
   end
 
   subgraph external [External Systems]
     GoogleOAuth[Google OAuth]
     GmailAPI[Gmail API]
     LLM[LLM Provider APIs]
-    LocalStorage[Browser localStorage]
   end
 
   Pages --> ServerComponents
@@ -124,7 +122,6 @@ flowchart TB
 | Store | What | Evidence |
 |-------|------|----------|
 | Gmail (external) | Source of truth for emails | `lib/gmail.ts` |
-| Browser `localStorage` | Saved user tasks | `lib/tasks/task-storage.ts`, key `TASK_STORAGE_KEY` in `lib/tasks/task-types.ts` |
 | In-memory `Map` (process) | AI controller cache, rate limits; analyze-search route cache | `lib/ai/controllers/*.ts`, `app/api/ai/analyze-search/route.ts` |
 | NextAuth session/JWT | User identity + `accessToken` | `lib/auth.ts`, `types/next-auth.d.ts` |
 
@@ -161,7 +158,6 @@ Bulk operations run **synchronously** in the request lifecycle via `lib/executor
 | Google OAuth | User authentication | `lib/auth.ts`, `LoginButton.tsx` |
 | Gmail API (`googleapis`) | Email CRUD/read | `lib/gmail.ts` |
 | LLM providers (OpenAI, Grok, Gemini, DeepSeek, Claude) | AI analysis | `lib/ai/provider-factory.ts`, `lib/ai/providers/*` |
-| Browser localStorage | Task persistence | `lib/tasks/task-storage.ts` |
 
 See `docs/api-reference.md` and architecture diagrams in `docs/system-flows.md`.
 
@@ -204,8 +200,6 @@ JSON/binary HTTP endpoints for client components and testing.
 | `ai/` | LLM abstraction (controllers + providers) |
 | `executor/` | Batch archive/delete with retry |
 | `export.ts` | ZIP/PDF generation |
-| `tasks/` | Task validation and localStorage CRUD |
-| `task-preview.ts` | Preview-only task runner (search + AI, no Gmail mutations) |
 
 ### Types (`types/`)
 

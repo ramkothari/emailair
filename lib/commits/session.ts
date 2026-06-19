@@ -1,7 +1,7 @@
 import type { Session } from "next-auth";
 
 export function getSessionUserId(session: Session | null): string | null {
-  return session?.user?.email ?? null;
+  return session?.user?.id ?? session?.user?.email ?? null;
 }
 
 export function requireSessionUserId(session: Session | null): string {

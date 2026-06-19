@@ -51,7 +51,7 @@
 | `layout.tsx` | Auth guard (`session.user`) |
 | `page.tsx` | Main dashboard: analytics, FilterBuilder, EmailTable |
 
-**Relationship:** Central production UX. Does **not** import task or SaveTask components (grep: no `SaveTaskButton` in `app/`).
+**Relationship:** Central production UX for the dashboard workspace.
 
 ### `app/actions/`
 
@@ -129,19 +129,6 @@
 | `AttachmentList.tsx` | Attachment download links |
 | `ExportSelectedButton.tsx` | Bulk ZIP export |
 
-### Tasks (built, not on dashboard)
-
-| Component | Role |
-|-----------|------|
-| `SaveTaskButton.tsx` | Task list + modals |
-| `CreateTaskModal.tsx`, `TaskCard.tsx` | CRUD UI |
-| `RunTaskModal.tsx` | Run confirmation (placeholder content) |
-| `TaskPreviewCard.tsx` | Full preview/execute flow (not wired to dashboard) |
-| `TaskImpactSummary.tsx` | Impact display (type errors) |
-| `TaskConfirmationDialog.tsx`, `TaskExecutionResult.tsx` | Task execution UX |
-
----
-
 ## `lib/` — Server/domain logic
 
 **Purpose:** Business logic callable from Server Components, Server Actions, and API routes.
@@ -185,20 +172,6 @@ PDF generation (`pdf-lib`), ZIP (`jszip`), size limits.
 | `index.ts` | Re-exports |
 | `__tests__/executor.test.ts` | Vitest tests |
 
-### `lib/tasks/`
-
-| Path | Role |
-|------|------|
-| `task-types.ts` | `Task` shape, storage key |
-| `task-storage.ts` | localStorage CRUD |
-| `task-validator.ts` | Input validation |
-
-### `lib/task-preview.ts`
-
-`runTaskPreview` — search + AI without Gmail mutations (has type bug passing metadata to AI).
-
----
-
 ## `types/` — Shared TypeScript types
 
 | File | Contents |
@@ -208,7 +181,6 @@ PDF generation (`pdf-lib`), ZIP (`jszip`), size limits.
 | `analytics.ts` | Analytics result shapes |
 | `ai.ts` | AI request/response types |
 | `ai-response.ts` | Additional AI response types |
-| `task-preview.ts` | Task preview/run types |
 | `next-auth.d.ts` | Session/JWT `accessToken` augmentation |
 
 ---
@@ -244,8 +216,7 @@ flowchart LR
 
 1. **`app/dashboard/page.tsx`** orchestrates analytics + filter + inbox; passes server actions to `FilterBuilder` and inline actions to `EmailTable`.
 2. **`FilterBuilder` → `FilterPreview`** is where AI + executor + export + viewer live.
-3. **`lib/ai`** is consumed by API route, AI playground (direct), and `lib/task-preview.ts` (direct, buggy).
-4. **Task UI** (`components/SaveTaskButton.tsx` et al.) depends on `lib/tasks/*` but is **not imported** by any `app/` route (grep confirmed).
+3. **`lib/ai`** is consumed by API routes and the AI playground.
 
 ---
 

@@ -70,20 +70,6 @@ File: `components/AIActionCard.tsx`.
 
 ## In Progress / Partial
 
-### Phase 8.3 — Task Builder + Execution
-
-**Status:** Partial.
-
-| Component | State |
-|-----------|-------|
-| `lib/tasks/task-storage.ts` | Complete (localStorage) |
-| `SaveTaskButton`, `CreateTaskModal`, `TaskCard` | Built, **not mounted** in `app/` |
-| `RunTaskModal` | Stub UI + TS errors |
-| `lib/task-preview.ts` | Logic present + TS errors |
-| `TaskPreviewCard`, `TaskImpactSummary` | Built, not wired; type errors |
-
-**Reference:** `PHASE_8_4_REAL_INTEGRATION.txt`, `PHASE_8_4_CONTEXT.txt`.
-
 ### Phase 8.3.2 — Confirmation Layer
 
 **Status:** Complete for **filter preview** executor; not for task modal.
@@ -115,13 +101,11 @@ Files: `ExecutionConfirmationModal.tsx`, `ExecutionResultModal.tsx`.
 | Component | Evidence of gap |
 |-----------|-----------------|
 | Dashboard navigation / sub-routes | Only `app/dashboard/page.tsx` exists |
-| Task UI on dashboard | No `SaveTaskButton` import in `app/` |
-| `runTaskPreview` integration | Not called from any page |
 | Download executor | Handler throws in `lib/executor/handlers.ts` |
 | Redis cache | TODOs only |
 | CI/CD pipeline | No workflow files in git |
 | API auth middleware | No `middleware.ts` |
-| Database / user settings sync | No backend store for tasks |
+| Database / user settings sync | No user settings table |
 | Phase 10 automation page content | No automation components on dashboard |
 
 ---
@@ -160,14 +144,12 @@ What does **not** work end-to-end for users:
 
 Ordered by dependency and documented plan:
 
-1. **Fix TypeScript errors** in `RunTaskModal.tsx`, `TaskImpactSummary.tsx`, `lib/task-preview.ts` — unblocks task work.
-2. **Integrate task automation** per `PHASE_8_4_REAL_INTEGRATION.txt`: mount `SaveTaskButton` on search UI; wire `RunTaskModal` → `runTaskPreview` → `TaskPreviewCard`.
-3. **Secure AI routes** with `auth()` if deploying beyond local dev.
-4. **Phase 10.1 dashboard split** — extract sections from `app/dashboard/page.tsx` without logic changes; update `revalidatePath` targets.
-5. **Unify or document** dual archive/delete paths (dashboard table vs executor).
-6. **Add `snippet` to `searchEmails` results** for better AI input (`lib/gmail.ts`).
-7. **Remove or implement** unused `archiveFilterAction`/`deleteFilterAction` props on `FilterBuilder`.
-8. **Production hardening:** Redis cache, OAuth refresh, CI, deployment docs.
+1. **Secure AI routes** with `auth()` if deploying beyond local dev.
+2. **Phase 10.1 dashboard split** — extract sections from `app/dashboard/page.tsx` without logic changes; update `revalidatePath` targets.
+3. **Unify or document** dual archive/delete paths (dashboard table vs executor).
+4. **Add `snippet` to `searchEmails` results** for better AI input (`lib/gmail.ts`).
+5. **Remove or implement** unused `archiveFilterAction`/`deleteFilterAction` props on `FilterBuilder`.
+6. **Production hardening:** Redis cache, OAuth refresh, CI, deployment docs.
 
 ---
 

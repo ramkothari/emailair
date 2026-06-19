@@ -45,41 +45,7 @@ All persistence falls into the categories below.
 
 ---
 
-### 3. Browser `localStorage` (Tasks)
-
-| Field | Value |
-|-------|-------|
-| **Key** | `email-cleaner-tasks` (`lib/tasks/task-types.ts` `TASK_STORAGE_KEY`) |
-| **Format** | JSON array of `Task` objects |
-| **Schema** | `lib/tasks/task-types.ts` |
-
-```typescript
-// Evidence: lib/tasks/task-types.ts
-type Task = {
-  id: string;
-  name: string;
-  query: string;      // Gmail search string (stored as opaque query text)
-  action: "delete" | "archive" | "download";
-  createdAt: string;
-  updatedAt: string;
-};
-```
-
-| Aspect | Detail |
-|--------|--------|
-| **Ownership** | Per browser, per origin |
-| **Validation** | `lib/tasks/task-validator.ts` on write |
-| **Lifecycle** | Created/updated/deleted via `lib/tasks/task-storage.ts`; survives page reload; not synced across devices |
-
-**Relationships:** None (flat list).
-
-**Constraints (application-level):**
-
-- Validated by `validateTaskInput` in `lib/tasks/task-validator.ts` — **exact rules: see that file** (not fully duplicated here; file exists in repo).
-
----
-
-### 4. In-Memory Process State (Server)
+### 3. In-Memory Process State (Server)
 
 | Store | Location | TTL | Purpose |
 |-------|----------|-----|---------|
@@ -95,7 +61,7 @@ type Task = {
 
 ---
 
-### 5. React `cache()` (Request Deduplication)
+### 4. React `cache()` (Request Deduplication)
 
 | Function | File |
 |----------|------|
@@ -111,7 +77,6 @@ This deduplicates within a single React render pass / request, not durable stora
 |-----------|-------|------------|
 | Email content | Google (Gmail) | Permanent (user mailbox) |
 | OAuth token | Google + session cookie/JWT | Session-bound |
-| Saved tasks | User browser | Until cleared |
 | AI cache | Server RAM | Ephemeral |
 | Export ZIP | Generated on demand | Transient (download) |
 
@@ -131,19 +96,6 @@ stateDiagram-v2
 ```
 
 Evidence: `lib/gmail.ts` `archiveEmails`, `deleteEmails`.
-
-### Task lifecycle (localStorage)
-
-```mermaid
-stateDiagram-v2
-  [*] --> Saved: saveTask()
-  Saved --> Saved: updateTask()
-  Saved --> [*]: deleteTask()
-  Saved --> RunAttempted: User Run (UI not mounted on dashboard)
-  RunAttempted --> [*]: UNKNOWN execution path
-```
-
----
 
 ## Comparison to Traditional Database Concerns
 

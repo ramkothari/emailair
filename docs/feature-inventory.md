@@ -201,7 +201,7 @@ Each feature lists **entry point**, **files**, **APIs**, **database entities**, 
 | Field | Value |
 |-------|-------|
 | **Purpose** | Provider-agnostic LLM calls with validation |
-| **Entry point** | Used by API routes, playground, task-preview |
+| **Entry point** | Used by API routes and playground |
 | **Files** | `lib/ai/**`, `types/ai.ts`, `PHASE_8_ARCHITECTURE.md` |
 | **APIs** | Multiple (see AI endpoints) |
 | **Status** | **Complete** (in-memory cache/rate limit per MVP design) |
@@ -232,42 +232,7 @@ Each feature lists **entry point**, **files**, **APIs**, **database entities**, 
 
 ---
 
-## 19. Saved Tasks (Browser Storage)
-
-| Field | Value |
-|-------|-------|
-| **Purpose** | Save named Gmail query + action for reuse |
-| **Entry point** | **NONE in `app/`** — `SaveTaskButton` not mounted |
-| **Files** | `components/SaveTaskButton.tsx`, `CreateTaskModal.tsx`, `TaskCard.tsx`, `lib/tasks/*` |
-| **APIs** | None (localStorage) |
-| **Storage** | `localStorage` key `email-cleaner-tasks` |
-| **Status** | **Partial** — CRUD works in component isolation; not integrated |
-
----
-
-## 20. Task Run Modal
-
-| Field | Value |
-|-------|-------|
-| **Purpose** | Confirm before running a saved task |
-| **Entry point** | `SaveTaskButton` → Run (when mounted) |
-| **Files** | `components/RunTaskModal.tsx` |
-| **Status** | **Stub** — placeholder text; imports broken `@/lib/types`; does not call `runTaskPreview` or render `TaskPreviewCard` |
-
----
-
-## 21. Task Preview Engine
-
-| Field | Value |
-|-------|-------|
-| **Purpose** | Search + AI analysis without Gmail mutations |
-| **Entry point** | **UNKNOWN** in production UI — `runTaskPreview` not called from `app/` |
-| **Files** | `lib/task-preview.ts`, `types/task-preview.ts`, `components/TaskPreviewCard.tsx`, `TaskImpactSummary.tsx` |
-| **Status** | **Partial** — logic exists; TypeScript errors in `task-preview.ts` and `TaskImpactSummary.tsx` |
-
----
-
-## 22. Bulk Executor Infrastructure
+## 19. Bulk Executor Infrastructure
 
 | Field | Value |
 |-------|-------|
@@ -278,7 +243,7 @@ Each feature lists **entry point**, **files**, **APIs**, **database entities**, 
 
 ---
 
-## 23. Sign Out
+## 20. Sign Out
 
 | Field | Value |
 |-------|-------|
@@ -289,7 +254,7 @@ Each feature lists **entry point**, **files**, **APIs**, **database entities**, 
 
 ---
 
-## 24. Error / Not Found Pages
+## 21. Error / Not Found Pages
 
 | Field | Value |
 |-------|-------|

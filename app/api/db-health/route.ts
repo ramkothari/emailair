@@ -4,6 +4,8 @@ import { tursoClient } from "@/db/client";
 export const runtime = "nodejs";
 
 const REQUIRED_TABLES = [
+  "users",
+  "activities",
   "automations",
   "automation_runs",
   "executions",
@@ -19,7 +21,7 @@ export async function GET() {
       select name
       from sqlite_master
       where type = 'table'
-        and name in ('automations', 'automation_runs', 'executions', 'commits', 'commit_items')
+        and name in ('users', 'activities', 'automations', 'automation_runs', 'executions', 'commits', 'commit_items')
       order by name
     `);
 

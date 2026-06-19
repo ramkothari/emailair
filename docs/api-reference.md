@@ -205,7 +205,6 @@ Application code should import AI only from `lib/ai/index.ts`:
 
 - `app/api/ai/*`
 - `app/ai-playground/page.tsx` (client)
-- `lib/task-preview.ts` (incorrectly passes `EmailMetadata[]` — bug)
 
 ---
 

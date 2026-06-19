@@ -4,14 +4,11 @@ Only issues proven from repository evidence are listed.
 
 ## Build-Breaking Type Errors
 
-`npm run type-check` fails.
+`npm run type-check` previously failed on legacy task-system files that have since been removed. Re-run the command for current status.
 
 Evidence from command output:
 
-- `components/RunTaskModal.tsx(6,28)`: cannot find module `@/lib/types`.
-- `components/RunTaskModal.tsx(46,23)`: `task` is possibly `null`.
-- `components/TaskImpactSummary.tsx`: references `result.analysis.important`, `result.risk.risk`, and `result.risk.warnings`, but `types/ai.ts` defines `EmailAnalysis` as `themes`, `patterns`, `suggestions`, `summary` and `RiskAssessment` as `riskLevel`, `riskScore`, `concerns`, `safe`, `recommendation`.
-- `lib/task-preview.ts`: passes `EmailMetadata[]` into `analyzeEmails()`, `detectRisk()`, and `summarizeEmails()`, whose public signatures accept `string[]` in `lib/ai/index.ts`.
+- Current verification should come from the latest `npm run type-check` output.
 
 Impact: the project does not type-check under the configured `tsc --noEmit` script. Evidence: `package.json`, `tsconfig.json`, command output.
 
@@ -35,19 +32,6 @@ Impact: AI API usage and provider debug metadata are reachable without repositor
 Evidence: `const maskedKey = apiKey === "NOT SET" ? apiKey : apiKey.substring(0, 10) + "..."` and returned JSON in `app/api/ai/debug/route.ts`.
 
 Impact: diagnostic route can disclose secret prefix. Combined with missing auth on that route, exposure risk is higher.
-
-## Task Subsystem Incomplete / Disconnected
-
-Task-library components and preview runner exist, but active route integration is not proven.
-
-Evidence:
-
-- `SaveTaskButton`, `TaskPreviewCard`, and `TaskImpactSummary` are not imported by any `app/` route in repository search.
-- `RunTaskModal.tsx` displays `[Results will appear after search]` and does not perform a search before confirmation.
-- `lib/task-preview.ts` exists but is not imported by an active route/component and fails type checking.
-- `lib/tasks/task-storage.ts` stores tasks in browser localStorage only.
-
-Impact: saved/reusable tasks appear planned but not production-integrated.
 
 ## Stale or Unused Props in Filter Builder
 
@@ -121,7 +105,7 @@ Impact: these can create bursty Gmail API calls and memory pressure for exports.
 
 ## Architectural Weaknesses
 
-- No durable server-side persistence for tasks, execution history, AI cache, or user settings. Evidence: `lib/tasks/task-storage.ts`, AI `Map` caches, no DB dependency.
+- No durable server-side persistence for AI cache or user settings. Evidence: AI `Map` caches.
 - Email provider abstraction is absent; Gmail is hard-coded. Evidence: `lib/gmail.ts`.
 - Search infrastructure is Gmail query only; no independent index. Evidence: `searchEmails()` in `lib/gmail.ts`.
 
@@ -133,7 +117,5 @@ Impact: these can create bursty Gmail API calls and memory pressure for exports.
 | Billing | Not proven from repository | no Stripe/billing route/dependency found |
 | Durable database | Not proven from repository | no DB dependency/source usage found |
 | Queue/background jobs | Not proven from repository | synchronous server actions/executor only |
-| Saved task execution | Incomplete/disconnected | `RunTaskModal.tsx`, `SaveTaskButton.tsx`, `lib/task-preview.ts` |
 | Executor download | Deferred | `lib/executor/handlers.ts` |
 | Redis cache/rate-limit | Planned only | TODO comments in `lib/ai/controllers/*.ts` |
-

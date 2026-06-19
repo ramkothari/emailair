@@ -233,28 +233,7 @@ Heuristics: promotions, LinkedIn, unread age, large attachments — `lib/analyti
 
 ---
 
-## Flow 11: Saved Task (Designed, Not Mounted)
-
-**Status:** Components exist; **no `app/` import** of `SaveTaskButton`.
-
-```mermaid
-flowchart LR
-  subgraph designed [Designed Path - PHASE_8_4_REAL_INTEGRATION.txt]
-    STB[SaveTaskButton] --> RTM[RunTaskModal]
-    RTM --> onRunTask[onRunTask callback]
-    onRunTask --> UNKNOWN[Page must implement preview]
-  end
-  subgraph available [Available but unused]
-    RTP[runTaskPreview lib/task-preview.ts]
-    TPC[TaskPreviewCard]
-  end
-```
-
-**Gap:** `RunTaskModal` does not call `runTaskPreview` or render `TaskPreviewCard` per current `components/RunTaskModal.tsx`.
-
----
-
-## Flow 12: AI Playground (Dev)
+## Flow 11: AI Playground (Dev)
 
 ```
 User → app/ai-playground/page.tsx

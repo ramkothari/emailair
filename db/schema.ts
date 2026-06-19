@@ -1,6 +1,46 @@
 import { relations } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    image: text("image"),
+    googleId: text("google_id").unique(),
+    createdAt: text("created_at").notNull(),
+    lastLoginAt: text("last_login_at").notNull(),
+  },
+  (table) => ({
+    emailIdx: index("idx_users_email").on(table.email),
+    googleIdIdx: index("idx_users_google_id").on(table.googleId),
+  })
+);
+
+export const activities = sqliteTable(
+  "activities",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    metadata: text("metadata", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index("idx_activities_user_created").on(
+      table.userId,
+      table.createdAt
+    ),
+    actionIdx: index("idx_activities_action").on(table.action),
+  })
+);
+
 export const automations = sqliteTable(
   "automations",
   {
@@ -163,6 +203,17 @@ export const commitItems = sqliteTable(
 
 export const executionsRelations = relations(executions, ({ many }) => ({
   commits: many(commits),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  activities: many(activities),
+}));
+
+export const activitiesRelations = relations(activities, ({ one }) => ({
+  user: one(users, {
+    fields: [activities.userId],
+    references: [users.id],
+  }),
 }));
 
 export const automationsRelations = relations(automations, ({ many }) => ({
