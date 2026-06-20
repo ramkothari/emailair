@@ -18,6 +18,31 @@ export const users = sqliteTable(
   })
 );
 
+export const googleCredentials = sqliteTable(
+  "google_credentials",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    googleId: text("google_id").notNull().unique(),
+    encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
+    encryptedAccessToken: text("encrypted_access_token"),
+    accessTokenExpiresAt: text("access_token_expires_at"),
+    scopes: text("scopes", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_google_credentials_user").on(table.userId),
+    googleIdx: index("idx_google_credentials_google_id").on(table.googleId),
+  })
+);
+
 export const activities = sqliteTable(
   "activities",
   {
@@ -207,7 +232,18 @@ export const executionsRelations = relations(executions, ({ many }) => ({
 
 export const usersRelations = relations(users, ({ many }) => ({
   activities: many(activities),
+  googleCredentials: many(googleCredentials),
 }));
+
+export const googleCredentialsRelations = relations(
+  googleCredentials,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [googleCredentials.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const activitiesRelations = relations(activities, ({ one }) => ({
   user: one(users, {

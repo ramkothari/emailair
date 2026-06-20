@@ -132,6 +132,7 @@ export async function runAutomation(input: {
   automation: AutomationRecord;
   runMode: "scheduled" | "manual";
   accessToken?: string;
+  resolveAccessToken?: () => Promise<string>;
 }): Promise<{
   runId: string;
   executionId: string | null;
@@ -141,18 +142,8 @@ export async function runAutomation(input: {
 }> {
   const { automation } = input;
 
-  if (!automation.conditionJson || !automation.actionJson) {
-    throw new Error("Automation is missing condition or action configuration.");
-  }
-
   if (await hasRunningRun(automation.id)) {
     throw new Error("Automation is already running.");
-  }
-
-  if (!input.accessToken) {
-    throw new Error(
-      "No Gmail access token is available for this automation run. Use Run Now from an authenticated session or add token persistence before enabling cron."
-    );
   }
 
   const runId = randomUUID();
@@ -172,8 +163,20 @@ export async function runAutomation(input: {
   });
 
   try {
+    if (!automation.conditionJson || !automation.actionJson) {
+      throw new Error("Automation is missing condition or action configuration.");
+    }
+
+    const accessToken = input.accessToken ?? (await input.resolveAccessToken?.());
+
+    if (!accessToken) {
+      throw new Error(
+        "No Gmail access token is available for this automation run."
+      );
+    }
+
     const emailIds = await findMatchingEmailIds({
-      accessToken: input.accessToken,
+      accessToken,
       conditionJson: automation.conditionJson,
       limit: getMaxEmailsPerRun(),
     });
@@ -211,11 +214,11 @@ export async function runAutomation(input: {
       action,
       emailIds,
       context: {
-        accessToken: input.accessToken,
+        accessToken,
       },
       commit: {
         userId: automation.userId,
-        accessToken: input.accessToken,
+        accessToken,
         title: automation.name,
         source: "automation",
         actionType: mapCommitAction(automation.actionJson),

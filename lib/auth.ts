@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { persistGoogleCredentials } from "@/lib/google/credentials";
 import { getUserByEmail, upsertAuthenticatedUser } from "@/lib/users/user-service";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -63,6 +64,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = persistedUser.name;
         token.picture = persistedUser.image;
         token.googleId = persistedUser.googleId;
+
+        await persistGoogleCredentials({
+          userId: persistedUser.id,
+          googleId: account.providerAccountId,
+          refreshToken:
+            typeof account.refresh_token === "string"
+              ? account.refresh_token
+              : null,
+          accessToken:
+            typeof account.access_token === "string" ? account.access_token : null,
+          accessTokenExpiresAt:
+            typeof account.expires_at === "number"
+              ? new Date(account.expires_at * 1000).toISOString()
+              : null,
+          scopes:
+            typeof account.scope === "string" ? account.scope.split(" ") : [],
+        });
       } else if (!token.userId && email) {
         const persistedUser = await getUserByEmail(email);
 

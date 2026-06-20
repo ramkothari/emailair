@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 const REQUIRED_TABLES = [
   "users",
+  "google_credentials",
   "activities",
   "automations",
   "automation_runs",
@@ -21,7 +22,7 @@ export async function GET() {
       select name
       from sqlite_master
       where type = 'table'
-        and name in ('users', 'activities', 'automations', 'automation_runs', 'executions', 'commits', 'commit_items')
+        and name in ('users', 'google_credentials', 'activities', 'automations', 'automation_runs', 'executions', 'commits', 'commit_items')
       order by name
     `);
 

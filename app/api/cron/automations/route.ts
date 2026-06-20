@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { automations } from "@/db/schema";
 import { runAutomation } from "@/lib/automations/run-automation";
+import { getValidGoogleAccessToken } from "@/lib/google/credentials";
 import type {
   AutomationActionJson,
   AutomationConditionJson,
@@ -51,7 +52,7 @@ function mapAutomationRow(
   };
 }
 
-export async function GET(request: Request) {
+async function handleCronRequest(request: Request) {
   try {
     assertCronAuthorized(request);
 
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
         const result = await runAutomation({
           automation,
           runMode: "scheduled",
+          resolveAccessToken: () => getValidGoogleAccessToken(automation.userId),
         });
 
         results.push({
@@ -112,4 +114,12 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(request: Request) {
+  return handleCronRequest(request);
+}
+
+export async function POST(request: Request) {
+  return handleCronRequest(request);
 }
