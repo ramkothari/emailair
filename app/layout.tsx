@@ -2,8 +2,20 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gmail Hygiene",
-  description: "Connect your Gmail account and clean up your inbox."
+  title: "EmailAir",
+  applicationName: "EmailAir",
+  description: "Connect your Gmail account and manage your inbox with EmailAir.",
+  openGraph: {
+    title: "EmailAir",
+    description: "Connect your Gmail account and manage your inbox with EmailAir.",
+    siteName: "EmailAir",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "EmailAir",
+    description: "Connect your Gmail account and manage your inbox with EmailAir.",
+  },
 };
 
 export default function RootLayout({

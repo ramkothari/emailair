@@ -33,7 +33,7 @@ export function DashboardShell({ email, children }: DashboardShellProps) {
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-4 px-5 pt-6 md:grid-cols-[1fr_auto_1fr]">
           <div className="min-w-0">
             <h1 className="text-base font-semibold tracking-tight text-gray-900 dark:text-[#F5F5F5]">
-              Gmail Hygiene
+              EmailAir
             </h1>
             <p className="mt-0.5 text-xs text-gray-600 dark:text-[#A1A1AA]">
               {email}

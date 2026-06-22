@@ -116,7 +116,7 @@ Each feature lists **entry point**, **files**, **APIs**, **database entities**, 
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Overview, top senders, attachments, cleanup candidates from up to 200 inbox emails |
+| **Purpose** | Overview, top senders, attachments, and inbox opportunities from up to 200 inbox emails |
 | **Entry point** | `GET /dashboard` |
 | **Files** | `app/dashboard/page.tsx`, `lib/analytics.ts`, `components/AnalyticsOverview.tsx`, `TopSenders.tsx`, `AttachmentInsights.tsx`, `CleanupCandidates.tsx`, `types/analytics.ts` |
 | **APIs** | None (server `getEmailAnalytics`) |

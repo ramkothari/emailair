@@ -24,12 +24,12 @@ export function CleanupCandidates({ candidates }: CleanupCandidatesProps) {
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
       <h2 className="text-lg font-semibold text-gray-900">
-        Cleanup Candidates
+        Inbox Opportunities
       </h2>
 
       {candidates.length === 0 ? (
         <p className="mt-4 text-sm text-gray-600">
-          No strong cleanup candidates found in the latest analyzed emails.
+          No strong inbox opportunities found in the latest analyzed emails.
         </p>
       ) : (
         <div className="mt-4 grid gap-4 md:grid-cols-2">

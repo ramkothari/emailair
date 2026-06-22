@@ -2,7 +2,7 @@
 
 ## Product Overview
 
-Gmail Hygiene is a SaaS-style Gmail cleanup application. It helps a signed-in Google user inspect their inbox, search Gmail with structured filters, analyze matching emails with AI, export email data, and archive or move messages to Trash. Evidence: `app/page.tsx`, `app/dashboard/page.tsx`, `components/FilterBuilder.tsx`, `components/FilterPreview.tsx`, `components/AIAnalysisCard.tsx`, `lib/gmail.ts`, `lib/export.ts`.
+EmailAir is a SaaS-style Gmail cleanup application. It helps a signed-in Google user inspect their inbox, search Gmail with structured filters, analyze matching emails with AI, export email data, and archive or move messages to Trash. Evidence: `app/page.tsx`, `app/dashboard/page.tsx`, `components/FilterBuilder.tsx`, `components/FilterPreview.tsx`, `components/AIAnalysisCard.tsx`, `lib/gmail.ts`, `lib/export.ts`.
 
 Target users are Gmail users who want to reduce inbox clutter and make cleanup decisions with preview, analytics, and AI risk/summary context. Evidence: landing copy in `app/page.tsx`; dashboard analytics/search/manual cleanup UI in `app/dashboard/page.tsx`; AI analysis copy in `components/AIAnalysisCard.tsx`.
 

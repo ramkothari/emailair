@@ -1,13 +1,13 @@
 # System Architecture
 
-**Product:** Gmail Hygiene (`package.json` name: `gmail-hygiene`)  
+**Product:** EmailAir (`package.json` name: `emailair`)  
 **Evidence date:** Repository snapshot analyzed from all tracked source files and git history.
 
 ---
 
 ## Product Purpose
 
-A Next.js web application that helps users clean up their Gmail inbox by:
+A Next.js web application that helps users manage their Gmail inbox by:
 
 - Authenticating with Google OAuth and obtaining a Gmail API access token (`lib/auth.ts`)
 - Listing, searching, viewing, archiving, and deleting emails via Gmail API (`lib/gmail.ts`)
@@ -196,7 +196,7 @@ JSON/binary HTTP endpoints for client components and testing.
 | Module | Responsibility |
 |--------|----------------|
 | `gmail.ts` | Gmail API wrapper |
-| `analytics.ts` | Inbox statistics and cleanup heuristics |
+| `analytics.ts` | Inbox statistics and organization heuristics |
 | `ai/` | LLM abstraction (controllers + providers) |
 | `executor/` | Batch archive/delete with retry |
 | `export.ts` | ZIP/PDF generation |

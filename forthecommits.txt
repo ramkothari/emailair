@@ -407,7 +407,7 @@ FILE: package.json
 ==================================================
 
 {
-  "name": "gmail-hygiene",
+  "name": "emailair",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -492,7 +492,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gmail Hygiene",
+  title: "EmailAir",
   description: "Connect your Gmail account and clean up your inbox."
 };
 
@@ -529,7 +529,7 @@ export default async function HomePage() {
     <main className="flex min-h-screen items-center justify-center px-6">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-200">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-          Gmail Hygiene
+          EmailAir
         </h1>
 
         <p className="mt-4 text-sm leading-6 text-gray-600">
@@ -605,7 +605,7 @@ export function DashboardShell({ email, children }: DashboardShellProps) {
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-4 px-5 pt-6 md:grid-cols-[1fr_auto_1fr]">
           <div className="min-w-0">
             <h1 className="text-base font-semibold tracking-tight text-gray-900 dark:text-[#F5F5F5]">
-              Gmail Hygiene
+              EmailAir
             </h1>
             <p className="mt-0.5 text-xs text-gray-600 dark:text-[#A1A1AA]">
               {email}
@@ -6591,7 +6591,7 @@ function writeLocalExecutionLog(input: {
   }
 
   try {
-    const key = "gmail-hygiene-task-execution-log";
+    const key = "emailair-task-execution-log";
     const existingRaw = window.localStorage.getItem(key);
     const existing = existingRaw
       ? (JSON.parse(existingRaw) as unknown)
@@ -7522,7 +7522,7 @@ import { useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
 
-const STORAGE_KEY = "gmail-hygiene-theme";
+const STORAGE_KEY = "emailair-theme";
 
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
@@ -8477,7 +8477,7 @@ export async function createEmailPdf(email: EmailDetails): Promise<Uint8Array> {
     size: 9,
     gap: 12,
   });
-  drawTextLine("Exported by Gmail Hygiene", { size: 9, gap: 4 });
+  drawTextLine("Exported by EmailAir", { size: 9, gap: 4 });
   drawTextLine(`Export Date: ${new Date().toISOString().split("T")[0]}`, {
     size: 9,
   });

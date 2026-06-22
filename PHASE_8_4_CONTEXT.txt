@@ -1090,7 +1090,7 @@ function writeLocalExecutionLog(input: {
   }
 
   try {
-    const key = "gmail-hygiene-task-execution-log";
+    const key = "emailair-task-execution-log";
     const existingRaw = window.localStorage.getItem(key);
     const existing = existingRaw
       ? (JSON.parse(existingRaw) as unknown)

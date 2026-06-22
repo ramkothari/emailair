@@ -815,7 +815,7 @@ export async function createEmailPdf(email: EmailDetails): Promise<Uint8Array> {
     size: 9,
     gap: 12,
   });
-  drawTextLine("Exported by Gmail Hygiene", { size: 9, gap: 4 });
+  drawTextLine("Exported by EmailAir", { size: 9, gap: 4 });
   drawTextLine(`Export Date: ${new Date().toISOString().split("T")[0]}`, {
     size: 9,
   });

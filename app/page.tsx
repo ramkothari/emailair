@@ -13,11 +13,11 @@ export default async function HomePage() {
     <main className="flex min-h-screen items-center justify-center px-6">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-200">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-          Gmail Hygiene
+          EmailAir
         </h1>
 
         <p className="mt-4 text-sm leading-6 text-gray-600">
-          Connect your Gmail account to start cleaning up your inbox.
+          Connect your Gmail account to manage your inbox with EmailAir.
         </p>
 
         <div className="mt-8 flex justify-center">

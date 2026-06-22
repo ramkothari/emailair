@@ -12,13 +12,13 @@ export default async function DashboardAutomationPage() {
   const enabledCount = automationItems.filter((item) => item.enabled).length;
   const recommendedAutomations = [
     {
-      name: "LinkedIn Cleanup",
+      name: "LinkedIn Organizer",
       count: "412 emails found",
       description: "Archive or remove old LinkedIn notifications.",
       preset: "social",
     },
     {
-      name: "Newsletter Cleanup",
+      name: "Newsletter Organizer",
       count: "842 emails found",
       description: "Remove newsletters and promotions automatically.",
       preset: "newsletters",
@@ -39,7 +39,7 @@ export default async function DashboardAutomationPage() {
             Automation
           </h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-[#A1A1AA]">
-            Keep your inbox clean automatically.
+            Keep your inbox organized automatically.
           </p>
         </div>
 

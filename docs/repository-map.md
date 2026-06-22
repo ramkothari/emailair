@@ -1,6 +1,6 @@
 # Repository Map
 
-**Repository:** `gmail-hygiene` (folder: `emailair`)  
+**Repository:** `emailair` (folder: `emailair`)  
 **Total tracked TS/TSX application files:** ~93 (per glob); **git tracked files:** 101 entries including docs and config.
 
 ---
@@ -100,7 +100,7 @@
 | `AnalyticsOverview.tsx` | Overview stats cards |
 | `TopSenders.tsx` | Sender leaderboard |
 | `AttachmentInsights.tsx` | Attachment metrics |
-| `CleanupCandidates.tsx` | Heuristic cleanup suggestions |
+| `CleanupCandidates.tsx` | Heuristic inbox opportunity suggestions |
 | `FilterBuilder.tsx` | Filter form + preview trigger |
 | `FilterPreview.tsx` | **Major hub:** selection, AI, executor, export, viewer |
 | `EmailTable.tsx` | Recent inbox table + archive/delete |

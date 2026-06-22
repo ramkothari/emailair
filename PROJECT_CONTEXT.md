@@ -2,7 +2,7 @@
 
 ## Product Overview
 **What the product does**
-- **Gmail Hygiene** is a Next.js web app that helps users clean up their inbox.
+- **EmailAir** is a Next.js web app that helps users clean up their inbox.
 - Users authenticate with **Google OAuth** to obtain a **Gmail access token**.
 - The app then enables:
   - Viewing recent inbox emails
